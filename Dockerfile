@@ -14,7 +14,12 @@ RUN go test ./... \
 
 # The plugin is a static binary that only talks to sysfs, the kubelet sockets and
 # the API server, so it needs nothing from userspace.
-FROM gcr.io/distroless/static-debian12:nonroot
+#
+# Deliberately NOT the :nonroot tag. A kubelet plugin has to create its socket under
+# /var/lib/kubelet/plugins and write CDI specs under /var/run/cdi, both root-owned on
+# the host. privileged: true does not change the UID, so a nonroot image fails at
+# startup with "mkdir ...: permission denied".
+FROM gcr.io/distroless/static-debian12
 
 COPY --from=build /rtlsdr-dra-kubeletplugin /usr/bin/rtlsdr-dra-kubeletplugin
 ENTRYPOINT ["/usr/bin/rtlsdr-dra-kubeletplugin"]

@@ -66,6 +66,21 @@ replug** (the EEPROM is only re-read at power-up; re-enumeration alone is not en
 
 ## Status
 
-Unit tested, including a regression fixture captured from a real node. The DRA
-integration — kubelet registration, CDI injection, end-to-end claim allocation — has
-**not** been exercised against a live kubelet yet.
+Verified end-to-end on a kind cluster running Kubernetes v1.34.0, against a synthetic
+sysfs tree mirroring a real node and `mknod`-ed USB device nodes:
+
+| Behaviour | Result |
+|---|---|
+| Publishes a ResourceSlice with the serial as an attribute | 2 devices, correct serials |
+| Unpinned claim draws any free radio | got `rtlsdr-35650102` |
+| CEL selector pins one specific stick | got `rtlsdr-37728719`, as selected |
+| CDI injects only that dongle's node | `189,4` and `189,132` respectively, one per container |
+| `RTLSDR_SERIAL` / `RTLSDR_DEVNODE` injected | present in both containers |
+| Pool exhaustion | 3rd pod stayed Pending: "cannot allocate all claims" |
+| Release on pod deletion | freed radio was reallocated to the waiting pod; CDI spec removed |
+
+Unit tests (27) cover discovery, attribute publishing, CDI spec generation, and the
+prepare/unprepare paths including re-enumeration and unplug.
+
+Not yet exercised: real RTL-SDR hardware (the dongles were simulated via sysfs and
+`mknod`), and multi-node scheduling.
