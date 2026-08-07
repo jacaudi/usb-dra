@@ -1,0 +1,46 @@
+---
+# Every device this driver publishes.
+apiVersion: resource.k8s.io/v1
+kind: DeviceClass
+metadata:
+  name: rtl-sdr.jacaudi.dev
+spec:
+  selectors:
+    - cel:
+        expression: device.driver == "sdr.jacaudi.dev"
+---
+# Any free radio. This is the default: the scheduler picks a dongle and places the
+# pod on whichever node holds it. One claim per pod => one pod per SDR.
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata:
+  name: rtl-sdr-any
+  namespace: selfhosted
+spec:
+  spec:
+    devices:
+      requests:
+        - name: radio
+          exactly:
+            deviceClassName: rtl-sdr.jacaudi.dev
+            allocationMode: ExactCount
+            count: 1
+---
+# One specific stick, selected by its EEPROM serial. Same class, one extra selector.
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata:
+  name: rtl-sdr-35650102
+  namespace: selfhosted
+spec:
+  spec:
+    devices:
+      requests:
+        - name: radio
+          exactly:
+            deviceClassName: rtl-sdr.jacaudi.dev
+            allocationMode: ExactCount
+            count: 1
+            selectors:
+              - cel:
+                  expression: device.attributes["sdr.jacaudi.dev"].serial == "35650102"
