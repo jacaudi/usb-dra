@@ -1,4 +1,3 @@
----
 # Every device this driver publishes.
 apiVersion: resource.k8s.io/v1
 kind: DeviceClass

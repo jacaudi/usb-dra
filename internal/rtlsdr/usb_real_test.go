@@ -36,7 +36,7 @@ usb2|1d6b|0002|0000:00:1d.0|2|1
 func buildSysfs(t *testing.T, capture string) fstest.MapFS {
 	t.Helper()
 	fsys := fstest.MapFS{}
-	for _, line := range strings.Split(strings.TrimSpace(capture), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(capture), "\n") {
 		f := strings.Split(line, "|")
 		if len(f) != 6 {
 			t.Fatalf("malformed fixture line %q", line)

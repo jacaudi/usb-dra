@@ -11,8 +11,6 @@ import (
 //	device.attributes["sdr.jacaudi.dev"].serial == "35650102"
 const DriverName = "sdr.jacaudi.dev"
 
-func strPtr(s string) *string { return &s }
-
 // Attributes describes the dongle to CEL selectors in a ResourceClaim.
 //
 // Only stable identity is published. The device node is deliberately excluded: bus
@@ -20,15 +18,15 @@ func strPtr(s string) *string { return &s }
 // would silently select the wrong radio after a replug.
 func (d Device) Attributes() map[resourceapi.QualifiedName]resourceapi.DeviceAttribute {
 	attrs := map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
-		"serial":  {StringValue: strPtr(d.Serial)},
-		"vendor":  {StringValue: strPtr(d.Vendor)},
-		"product": {StringValue: strPtr(d.Product)},
+		"serial":  {StringValue: new(d.Serial)},
+		"vendor":  {StringValue: new(d.Vendor)},
+		"product": {StringValue: new(d.Product)},
 	}
 	if d.Manufacturer != "" {
-		attrs["manufacturer"] = resourceapi.DeviceAttribute{StringValue: strPtr(d.Manufacturer)}
+		attrs["manufacturer"] = resourceapi.DeviceAttribute{StringValue: new(d.Manufacturer)}
 	}
 	if d.ProductName != "" {
-		attrs["productName"] = resourceapi.DeviceAttribute{StringValue: strPtr(d.ProductName)}
+		attrs["productName"] = resourceapi.DeviceAttribute{StringValue: new(d.ProductName)}
 	}
 	return attrs
 }

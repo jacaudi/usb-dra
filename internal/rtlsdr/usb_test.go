@@ -1,6 +1,7 @@
 package rtlsdr
 
 import (
+	"maps"
 	"testing"
 	"testing/fstest"
 )
@@ -23,9 +24,7 @@ func usbDev(dir, vendor, product, serial, busnum, devnum string) fstest.MapFS {
 func merge(sets ...fstest.MapFS) fstest.MapFS {
 	out := fstest.MapFS{}
 	for _, s := range sets {
-		for k, v := range s {
-			out[k] = v
-		}
+		maps.Copy(out, s)
 	}
 	return out
 }
