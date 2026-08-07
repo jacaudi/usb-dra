@@ -1,0 +1,21 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "github>jacaudi/renovate-config:base",
+    "github>jacaudi/renovate-config:go",
+    "github>jacaudi/renovate-config:kubernetes",
+    "github>jacaudi/renovate-config:automerge"
+  ],
+  "packageRules": [
+    {
+      "description": "Hold k8s.io libraries at the target cluster's minor (1.34 => v0.34.x). The kubeletplugin and resource.k8s.io APIs move between minors, so a bump here is a deliberate cluster-version decision, not a routine update. Raise the bound when the cluster is upgraded.",
+      "matchPackageNames": ["/^k8s\\.io//"],
+      "allowedVersions": "<0.35.0"
+    },
+    {
+      "description": "CDI is the container runtime contract; never automerge it",
+      "matchPackageNames": ["/^tags\\.cncf\\.io\\/container-device-interface/"],
+      "automerge": false
+    }
+  ]
+}
