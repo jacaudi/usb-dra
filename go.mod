@@ -2,7 +2,7 @@ module github.com/jacaudi/rtlsdr-dra
 
 go 1.26
 
-toolchain go1.26.5
+toolchain go1.26.6
 
 require (
 	k8s.io/api v0.34.10
