@@ -32,6 +32,7 @@
 - Sanctioned test command: `task test` (runs `go test ./... -race`).
 - Sanctioned environment: host toolchain (no `.devcontainer/`).
 - New dependencies: allowed only with a present requirement, pinned, named in the report (see Global Constraints for the one accepted set).
+- Dependency bump to clear govulncheck: in scope as Task 9 (user, 2026-11-14).
 - Boundaries: 8 hours wall clock; dispatch cap `6 × tasks + 12`; 2 hours without a task completing (defaults, user 2026-11-13).
 - Worktree after (a) merge: remove (not applicable under (c)).
 - Already done before this plan (user-authorized): GitHub repo renamed `jacaudi/rtlsdr-dra` → `jacaudi/usb-dra`, remote URL updated; sysfs fixtures committed (`c6f0425`).
@@ -39,7 +40,7 @@
 
 ## Global Constraints
 
-- Versions: `k8s.io/*` stays v0.34.3; `tags.cncf.io/container-device-interface` stays v1.1.0. Task 5's `go mod tidy` adds the test-only modules that `k8s.io/dynamic-resource-allocation/cel` needs (`k8s.io/apiserver` v0.34.3, `k8s.io/component-base` v0.34.3, `github.com/google/cel-go` v0.26.0, `cel.dev/expr` and their dependencies) and bumps `github.com/fsnotify/fsnotify` v1.5.1 → v1.9.0; that diff is accepted (ledger ruling). No other module requirement may change. Imports from modules already required (`k8s.io/dynamic-resource-allocation/resourceclaim`, `k8s.io/apimachinery/pkg/util/yaml`, `sigs.k8s.io/yaml`) are allowed in any code.
+- Versions: `k8s.io/*` stays v0.34.3; `tags.cncf.io/container-device-interface` stays v1.1.0. Task 5's `go mod tidy` adds the test-only modules that `k8s.io/dynamic-resource-allocation/cel` needs (`k8s.io/apiserver` v0.34.3, `k8s.io/component-base` v0.34.3, `github.com/google/cel-go` v0.26.0, `cel.dev/expr` and their dependencies) and bumps `github.com/fsnotify/fsnotify` v1.5.1 → v1.9.0; that diff is accepted (ledger ruling). Task 9 bumps the vulnerable dependencies (user request 2026-11-14). No other module requirement may change. Imports from modules already required (`k8s.io/dynamic-resource-allocation/resourceclaim`, `k8s.io/apimachinery/pkg/util/yaml`, `sigs.k8s.io/yaml`) are allowed in any code.
 - Names: driver `usb.jacaudi.dev`; module `github.com/jacaudi/usb-dra`; CDI vendor `k8s.usb.jacaudi.dev`, class `usb`; env prefix `USB_`.
 - Never publish device node, bus number, devnum, tty names or tty aliases as attributes.
 - CDI device nodes carry `Path`, `HostPath` and `Permissions: "rw"` only: no `Type`, `Major`, `Minor`, `UID`, `GID`, `FileMode`.
@@ -570,3 +571,32 @@ config:
   Expected: no `MISSING` lines; `Summary: 0 issues in 0 files` (or the tool's equivalent zero-issues summary).
 
 - [ ] **Step 5: Commit** — paths: `README.md .claude/CLAUDE.md .markdownlint-cli2.yaml`; message `docs: describe usb-dra and its invariants`.
+
+---
+
+### Task 9: Bump vulnerable dependencies and the Go toolchain
+
+Kind: rewrite
+
+**Files:**
+- Modify: `go.mod`
+- Modify: `go.sum`
+
+**Interfaces:**
+- Consumes: the module state after Task 5's `go mod tidy`.
+- Produces: no API change. New acceptance criterion: `govulncheck` reports no vulnerability the code calls.
+
+- [ ] **Step 1: Confirm the RED state**
+  Run: `GOTOOLCHAIN=go1.26.11 govulncheck ./... 2>&1 | grep -E 'Found in|Fixed in' | sort -u`
+  Expected: `Found in` lines for `golang.org/x/net@v0.57.0` and `google.golang.org/grpc@v1.82.1` (stdlib is already clean under go1.26.11; the advisory GO-2026-6859 is fixed in go1.26.11). If `GOTOOLCHAIN=go1.26.11` cannot download the toolchain, `PLAN: BLOCKED — every path is a guess: toolchain download`.
+
+- [ ] **Step 2: Bump**
+  Run: `go get golang.org/x/net@v0.60.0 google.golang.org/grpc@v1.83.1 && go mod edit -toolchain=go1.26.11 && go mod tidy && git diff go.mod`
+  Expected: `golang.org/x/net` → `v0.60.0`; `google.golang.org/grpc` → `v1.83.1`; `toolchain go1.26.11`; `go 1.26` may become `go 1.26.0`; indirect bumps limited to `golang.org/x/mod`, `golang.org/x/sys`, `golang.org/x/term`, `golang.org/x/text`, `google.golang.org/genproto/googleapis/rpc` and other `golang.org/x/*` modules. Any `k8s.io/*` or `tags.cncf.io/*` version change is `PLAN: BLOCKED — every path is a guess: dependency bump moved k8s.io`.
+
+- [ ] **Step 3: Verify**
+  Run: `task test && golangci-lint run && go mod tidy -diff && GOTOOLCHAIN=go1.26.11 govulncheck ./...; echo "vuln-exit=$?"`
+  Expected: all `ok`, lint exit 0, no diff, govulncheck prints either `No vulnerabilities found.` or only the "your code doesn't appear to call these vulnerabilities" note, and `vuln-exit=0`.
+
+- [ ] **Step 4: Commit** — paths: `go.mod go.sum`; message `chore(deps): bump x/net, grpc and the go toolchain to clear govulncheck`.
+
