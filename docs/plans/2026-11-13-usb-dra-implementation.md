@@ -46,9 +46,9 @@
 - ResourceSlice validity: device names are DNS-1123 labels ≤ 63 and unique; device count capped with `resourceapi.ResourceSliceMaxDevices`; string attributes bounded with `resourceapi.DeviceAttributeMaxValueLength` (never literal `128` / `64`).
 - Pointer literals use Go 1.26 `new(value)`; do not add `k8s.io/utils/ptr`.
 - New or changed code comments are single lines, used where Go convention needs them (package and exported-identifier doc comments).
-- After every task: `task test` passes, `golangci-lint run` prints `0 issues.`, `go mod tidy -diff` prints nothing.
+- After every task: `task test` passes; `golangci-lint run` exits 0 (it prints `0 issues.`, or `golangci-lint: No issues found` when the rtk hook rewrites it); `go mod tidy -diff` prints nothing.
 - Test fixtures live under `internal/usb/testdata/sysfs/`. `.dockerignore` strips `**/testdata` and `**/*_test.go`, so the Docker build runs no tests; this plan does not change that.
-- **Commit step format** (every task's last step): Run: `git add <the task's listed paths> && git commit -m "<message>" -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>" && git cat-file commit HEAD | grep -c '^gpgsig'` — Expected: `1`. A signing error is `PLAN: PAUSED — signing`.
+- **Commit step format** (every task's last step): Run: `git add <the task's listed paths> && git commit -m "<message>" -m "Co-Authored-By: Claude <noreply@anthropic.com>" && git cat-file commit HEAD | grep -c '^gpgsig'` — Expected: `1`. A signing error is `PLAN: PAUSED — signing`.
 
 ## Review Focus
 
@@ -87,20 +87,20 @@ Kind: rewrite
   Run: `git mv internal/rtlsdr internal/usb && git mv cmd/rtlsdr-dra-kubeletplugin cmd/usb-dra-kubeletplugin && git mv testdata internal/usb/testdata && git status --short | head -20`
   Expected: `R` (rename) lines for every file listed above; no errors.
 
-- [ ] **Step 2: Change expected values in the moved tests**, in this order (the first must precede the second): `k8s.sdr.jacaudi.dev/rtlsdr` → `k8s.usb.jacaudi.dev/usb`; `sdr.jacaudi.dev` → `usb.jacaudi.dev`; `RTLSDR_SERIAL=` → `USB_SERIAL=`; `RTLSDR_DEVNODE=` → `USB_DEVNODE=`; package clause `package rtlsdr` → `package usb`; import `github.com/jacaudi/rtlsdr-dra/internal/rtlsdr` → `github.com/jacaudi/usb-dra/internal/usb` and identifier `rtlsdr.` → `usb.`.
+- [ ] **Step 2: Change expected values in the moved tests** (every `*_test.go` under `cmd/usb-dra-kubeletplugin/` and `internal/usb/`), in this order (the first must precede the second): `k8s.sdr.jacaudi.dev/rtlsdr` → `k8s.usb.jacaudi.dev/usb`; `sdr.jacaudi.dev` → `usb.jacaudi.dev`; every `RTLSDR_SERIAL` → `USB_SERIAL` and `RTLSDR_DEVNODE` → `USB_DEVNODE` (including inside `t.Errorf` messages); package clause `package rtlsdr` → `package usb`; import `github.com/jacaudi/rtlsdr-dra/internal/rtlsdr` → `github.com/jacaudi/usb-dra/internal/usb` and identifier `rtlsdr.` → `usb.`.
 
 - [ ] **Step 3: Run to verify failure**
   Run: `go test ./... 2>&1 | tail -5`
   Expected: FAIL (build errors: module path `github.com/jacaudi/usb-dra` not found, or package clause mismatch).
 
 - [ ] **Step 4: Apply the rename in production code**
-  `go.mod` module `github.com/jacaudi/usb-dra`; `package usb` in `usb.go`/`slice.go`; `DriverName = "usb.jacaudi.dev"`; `cdiClass = "usb"`; env keys `USB_SERIAL`, `USB_DEVNODE`; cmd imports. `deploy/daemonset.yaml`: every `rtlsdr-dra` → `usb-dra`, `--driver-name=usb.jacaudi.dev`, image `ghcr.io/jacaudi/usb-dra:latest`. `Dockerfile`: build `-o /usb-dra-kubeletplugin ./cmd/usb-dra-kubeletplugin`, `COPY --from=build /usb-dra-kubeletplugin /usr/bin/usb-dra-kubeletplugin`, `ENTRYPOINT ["/usr/bin/usb-dra-kubeletplugin"]`.
+  `go.mod` module `github.com/jacaudi/usb-dra`; `package usb` in `usb.go`/`slice.go`; `DriverName = "usb.jacaudi.dev"`; `cdiClass = "usb"`; env keys `USB_SERIAL`, `USB_DEVNODE`; in `main.go` and `driver.go` the import becomes `github.com/jacaudi/usb-dra/internal/usb` and every `rtlsdr.` identifier becomes `usb.`. Exact comment edits: the package comment in `internal/usb/usb.go` becomes the single line `// Package usb discovers USB devices from sysfs and models them as DRA devices.`; the doc comment at the top of `main.go` becomes the single line `// Command usb-dra-kubeletplugin publishes local USB devices as DRA devices and maps them into containers via CDI.`; in `cdi.go` the `rtl_tcp -d "$RTLSDR_SERIAL"` comment text becomes `rtl_tcp -d "$USB_SERIAL"`; in `slice.go` the doc example `device.attributes["sdr.jacaudi.dev"]` becomes `device.attributes["usb.jacaudi.dev"]`. `deploy/daemonset.yaml`: every `rtlsdr-dra` → `usb-dra`, `--driver-name=usb.jacaudi.dev`, image `ghcr.io/jacaudi/usb-dra:latest`. `Dockerfile`: build `-o /usb-dra-kubeletplugin ./cmd/usb-dra-kubeletplugin`, `COPY --from=build /usb-dra-kubeletplugin /usr/bin/usb-dra-kubeletplugin`, `ENTRYPOINT ["/usr/bin/usb-dra-kubeletplugin"]`.
 
 - [ ] **Step 5: Verify**
   Run: `task test && golangci-lint run && go mod tidy -diff && grep -rnE 'rtlsdr-dra|sdr\.jacaudi\.dev|RTLSDR_|internal/rtlsdr' cmd internal deploy/daemonset.yaml Dockerfile go.mod .github taskfile.yml .taskfiles; echo "grep-exit=$?"`
-  Expected: `ok` for both packages, `0 issues.`, no tidy output, no grep matches, `grep-exit=1`.
+  Expected: `ok` for both packages, lint exit 0, no tidy output, no grep matches, `grep-exit=1`.
 
-- [ ] **Step 6: Commit** — paths: `go.mod cmd internal deploy/daemonset.yaml Dockerfile testdata`; message `feat(usb-dra)!: rename driver to usb.jacaudi.dev`.
+- [ ] **Step 6: Commit** — paths: `go.mod cmd internal deploy/daemonset.yaml Dockerfile` (the `git mv` renames, including `internal/usb/testdata`, are already staged); message `feat(usb-dra)!: rename driver to usb.jacaudi.dev`.
 
 ---
 
@@ -154,7 +154,7 @@ func TestFilterPublish(t *testing.T) {
 ```
 
 - [ ] **Step 2: Run to verify failure**
-  Run: `go test ./internal/usb/ -run 'TestParse|TestFilter' 2>&1 | tail -3`
+  Run: `go test ./internal/usb/ -run 'TestParse|TestFilter' 2>&1 | tail -15`
   Expected: FAIL, build error `undefined: ParseExcludeClasses` (this compile failure is the RED state; add no stubs).
 
 - [ ] **Step 3: Implement the signatures above in `internal/usb/filter.go`**
@@ -162,7 +162,7 @@ func TestFilterPublish(t *testing.T) {
 
 - [ ] **Step 4: Verify**
   Run: `task test && golangci-lint run && go mod tidy -diff`
-  Expected: all `ok`, `0 issues.`, no diff.
+  Expected: all `ok`, lint exit 0, no diff.
 
 - [ ] **Step 5: Commit** — paths: `internal/usb/filter.go internal/usb/filter_test.go`; message `feat(usb): add device class filter and include overrides`.
 
@@ -183,7 +183,7 @@ func TestFilterPublish(t *testing.T) {
   - `type Skip struct{ Dir, Reason string; Severe bool }`
   - `func scan(fsys fs.FS, f Filter) ([]candidate, []Skip, error)` — candidates sorted by `Dir`; error only when `SysfsUSBDir` cannot be read
   - `func portRevision(speed string) (string, bool)`
-  - test helpers in `fixture_test.go`: `func loadFixture(t *testing.T, name string) fstest.MapFS` (reads `testdata/sysfs/<name>.tsv`; each line `path<TAB>content` becomes `fsys[path] = &fstest.MapFile{Data: []byte(content + "\n")}`), `func withFile(fsys fstest.MapFS, path, content string)`, `func without(fsys fstest.MapFS, path string)`
+  - test helpers in `fixture_test.go`: `func loadFixture(t *testing.T, name string) fstest.MapFS` (reads `testdata/sysfs/<name>.tsv`; each line `path<TAB>content` becomes `fsys[path] = &fstest.MapFile{Data: []byte(content + "\n")}`); `func withFile(fsys fstest.MapFS, rel, content string)` sets `fsys[SysfsUSBDir+"/"+rel]` to `content + "\n"`; `func without(fsys fstest.MapFS, rel string)` deletes the key `SysfsUSBDir+"/"+rel` and every key under it (`… + "/"`). All test paths such as `5-1/serial` or `5-1:1.0` are relative to `SysfsUSBDir`. Every skip test asserts the exact `Reason`.
 
 - [ ] **Step 1: Write the fixture helpers and the failing tests**
 
@@ -206,15 +206,17 @@ func TestScanSkipsVhciSilently(t *testing.T)
 	// add device 17-1 under the fixture's usb17 (serial "vhci_hcd.0"): idVendor "abcd", idProduct "0001",
 	// busnum "17", devnum "2", bDeviceClass "00", 17-1:1.0 bInterfaceClass "ff", bInterfaceNumber "00"
 	// → absent from cands and from skips
-func TestScanSkipsUnconfigured(t *testing.T)     // remove 5-1:1.0/* and 5-1:1.1/* → Skip{Dir "5-1", Severe false}
+func TestScanSkipsUnconfigured(t *testing.T)     // without "5-1:1.0" and without "5-1:1.1" → Skip{Dir "5-1", Reason "no interfaces", Severe false}
+func TestScanSkipsUnreadableDevice(t *testing.T) // 5-1/devnum "x" → Skip{Dir "5-1", Reason "unreadable device", Severe false}
 func TestScanSkipsUnreadableInterface(t *testing.T)
-	// remove 5-1:1.1/bInterfaceClass → Skip{Dir "5-1", Severe false}; 9-1 and 11-1 still in cands; err == nil
-func TestScanSkipsBadInterfaceNumber(t *testing.T) // 5-1:1.1/bInterfaceNumber "zz" → Skip{Dir "5-1", Severe false}
-func TestScanSkipsUnknownSpeed(t *testing.T)     // usb5/speed "unknown" → Skip{Dir "5-1", Severe false}
-func TestScanSkipsOverlongPort(t *testing.T)     // usb5/serial = 70 × "a" → Skip{Dir "5-1", Severe true}
+	// without "5-1:1.1/bInterfaceClass" → Skip{Dir "5-1", Reason "unreadable interface", Severe false}; 9-1 and 11-1 still in cands; err == nil
+func TestScanSkipsBadInterfaceNumber(t *testing.T) // 5-1:1.1/bInterfaceNumber "zz" → Skip{Dir "5-1", Reason "unreadable interface", Severe false}
+func TestScanSkipsUnknownSpeed(t *testing.T)     // usb5/speed "unknown" → Skip{Dir "5-1", Reason "unknown root hub speed", Severe false}
+func TestScanSkipsOverlongPort(t *testing.T)     // usb5/serial = 70 × "a" → Skip{Dir "5-1", Reason "port longer than 64 bytes", Severe true}
 func TestScanMissingRootIsError(t *testing.T)    // fstest.MapFS{} → err != nil
 func TestScanOrdersInterfacesAndTTYsNumerically(t *testing.T)
-	// synthetic device 3-1 under usb3 (serial "0000:00:14.0", speed "480", bDeviceClass "09"):
+	// synthetic device 3-1 (idVendor "1a86", idProduct "7523", busnum "3", devnum "4", bDeviceClass "00")
+	// under usb3 (serial "0000:00:14.0", speed "480", bDeviceClass "09"):
 	// dirs 3-1:1.10 (bInterfaceNumber "0a", class "ff", entries ttyUSB10/dev and ttyUSB2/dev)
 	// and 3-1:1.2 (bInterfaceNumber "02", class "02", tty/ttyACM3/dev)
 	// → Interfaces[0] == {2, "02", ["ttyACM3"]}, Interfaces[1] == {10, "ff", ["ttyUSB2", "ttyUSB10"]}
@@ -223,20 +225,21 @@ func TestPortRevision(t *testing.T)
 ```
 
 - [ ] **Step 2: Run to verify failure**
-  Run: `go test ./internal/usb/ -run 'TestScan|TestPortRevision' 2>&1 | tail -3`
+  Run: `go test ./internal/usb/ -run 'TestScan|TestPortRevision' 2>&1 | tail -15`
   Expected: FAIL, build error `undefined: scan`.
 
 - [ ] **Step 3: Implement `scan` and `portRevision` in `internal/usb/sysfs.go`** per the spec's Discovery and Controller/revision/port sections. Decided here:
-  - Device dirs: entries of `SysfsUSBDir` without `:` that have `idVendor`, `idProduct`, `busnum`, `devnum`; others are ignored silently.
+  - Device dirs: entries of `SysfsUSBDir` without `:` that have `idVendor`, `idProduct`, `busnum`, `devnum`; others are ignored silently. A device whose `bDeviceClass` is unreadable or whose `busnum`/`devnum` is not an integer → Skip `unreadable device` (Severe false).
+  - Check order per device: hub check, `Filter.Publish` (silent), then root hub reads (controller, speed) and port.
   - Silent (no Skip): `bDeviceClass == "09"` (hub); controller (`usb<busnum>/serial`) starting with `vhci_hcd`; `Filter.Publish` false.
   - Interfaces of `D`: entries with prefix `D + ":"`. `bInterfaceNumber` via `strconv.ParseUint(v, 16, 8)`; `bInterfaceClass` stored as the two-digit lowercase string after validating it parses as hex.
   - ttys: names under `<intf>/tty/`, plus entries of `<intf>` whose name starts with `ttyUSB`; sorted by the integer after the trailing letters.
-  - Skip reasons (exact strings): `no interfaces` (Severe false), `unreadable interface` (false), `unknown root hub speed` (false), `unreadable root hub` (false, when `usb<busnum>/serial` or `speed` is missing), `port longer than 64 bytes` (true, use `resourceapi.DeviceAttributeMaxValueLength`).
+  - Skip reasons (exact strings): `unreadable device` (Severe false), `no interfaces` (Severe false), `unreadable interface` (false), `unknown root hub speed` (false), `unreadable root hub` (false, when `usb<busnum>/serial` or `speed` is missing), `port longer than 64 bytes` (true, use `resourceapi.DeviceAttributeMaxValueLength`).
   - Port = `<controller>-v<rev>-<chain>`, chain = device dir name after `<busnum>-`.
 
 - [ ] **Step 4: Verify**
   Run: `task test && golangci-lint run && go mod tidy -diff`
-  Expected: all `ok`, `0 issues.`, no diff.
+  Expected: all `ok`, lint exit 0, no diff.
 
 - [ ] **Step 5: Commit** — paths: `internal/usb/sysfs.go internal/usb/sysfs_test.go internal/usb/fixture_test.go`; message `feat(usb): scan sysfs for every usb device with interfaces, ttys and port`.
 
@@ -260,6 +263,7 @@ Kind: rewrite
 
 **Interfaces:**
 - Consumes: `scan`, `candidate`, `Interface`, `Skip` (Task 3); `Filter`, `DefaultExcludeClasses`, `ParseExcludeClasses` (Task 2).
+- File placement: `Identity`, `Device` and its methods, `Scan`, `Discover`, `FindByName` in `usb.go`; `deviceName` and the uniqueness pass in `identity.go`; `Attributes`, `NodeResources` in `slice.go`. Tests: `TestDiscover*`, `TestDuplicate*`, `TestCaseFolded*`, `TestPortCollision*`, `Test*SerialIsPortIdentity`, `TestFindByName` in `usb_test.go`; `TestDeviceNameSanitizes`, `TestLongNameIsTruncatedWithHash` in `identity_test.go`; `TestAttributes*`, `TestNodeResources*` in `slice_test.go` (replacing its current contents, including the old `TestNodeResourcesPublishesEmptyPool`).
 - Produces:
   - `type Identity string` with `IdentitySerial Identity = "serial"`, `IdentityPort Identity = "port"`
   - `type Device struct{ Name string; Identity Identity; Vendor, Product, Serial, Port, Manufacturer, ProductName string; Interfaces []Interface; Bus, Dev int }` — `Serial` = raw serial if non-empty, valid UTF-8, ≤ `DeviceAttributeMaxValueLength` bytes and not `^0+$` (kept for duplicates), else `""`; `Manufacturer`/`ProductName` = `""` if invalid UTF-8, else truncated on a rune boundary to ≤ 64 bytes
@@ -287,10 +291,12 @@ func TestDiscoverMediaTekPortIdentity(t *testing.T) // Filter{} → "usb-0e8d-c6
 func TestDuplicateSerialsFallBackToPort(t *testing.T)
 	// set 9-1/serial and 11-1/serial to "00000001" → both Identity port, both Serial "00000001",
 	// names "usb-0bda-2838-p-pnp0d10-04-v2-1" and "usb-0bda-2838-p-pnp0d10-05-v2-1", DuplicateSerials == []string{"00000001"}
-func TestCaseFoldedSerialsCollide(t *testing.T)    // 9-1 serial "AbC", 11-1 serial "abc" → both Identity port
+func TestCaseFoldedSerialsCollide(t *testing.T)    // 9-1 serial "AbC", 11-1 serial "abc" → both Identity port; DuplicateSerials == []string{"AbC", "abc"}
 func TestPortCollisionSkipsBoth(t *testing.T)
-	// synthetic usb3 and usb4 both serial "0000:00:14.0", speed "480"; serial-less devices 3-1 and 4-1 (vid:pid 1a86:7523,
-	// one interface class "ff") → neither in Devices; Skipped has both with Reason "name collision", Severe true
+	// synthetic usb3 and usb4 both serial "0000:00:14.0", speed "480", bDeviceClass "09"; serial-less devices 3-1 and 4-1
+	// (vid:pid 1a86:7523, bDeviceClass "00", one interface class "ff") → neither in Devices; Skipped has both with
+	// Reason "name collision", Severe true
+func TestMissingSerialIsPortIdentity(t *testing.T)   // without "5-1/serial" → Name "usb-239a-8029-p-pnp0d10-02-v2-1", Identity port, Serial ""
 func TestAllZeroSerialIsPortIdentity(t *testing.T)   // 5-1/serial "000000000" → Identity port, Serial ""
 func TestOverlongSerialIsPortIdentity(t *testing.T)  // 5-1/serial = 65 × "A" → Identity port, Serial ""
 func TestInvalidUTF8SerialIsPortIdentity(t *testing.T) // 5-1/serial "\xff\xfe" → Identity port, Serial ""
@@ -313,13 +319,13 @@ func TestFindByName(t *testing.T)                  // "usb-239a-8029-fd14948954c
 ```
 
 - [ ] **Step 2: Run to verify failure**
-  Run: `go test ./internal/usb/ 2>&1 | tail -3`
+  Run: `go test ./internal/usb/ 2>&1 | tail -15`
   Expected: FAIL (build errors on `Discover`'s new signature and `Device` fields).
 
 - [ ] **Step 3: Implement** per the spec's Identity and device names, Attributes sections. Decided here:
   - `deviceName`: `"usb-" + vendor + "-" + product + "-" + id`, lowercase; `[^a-z0-9-]` → `-`; collapse `-+`; trim `-`; if > 63, `name[:54] + "-" + first 8 hex of sha256(name)` where `name` is the sanitized untruncated string.
   - Port-identity id is `"p-" + Port`.
-  - Uniqueness: build names; any group of ≥ 2 serial-identity devices sharing a name → all switch to port identity, their serial appended once to `DuplicateSerials` (sorted, unique); rebuild names; any remaining group of ≥ 2 → all removed, each added to `Skipped` with Reason `name collision`, Severe true.
+  - Uniqueness: build names; any group of ≥ 2 serial-identity devices sharing a name → all switch to port identity, each one's raw serial added to `DuplicateSerials` (sorted, unique); rebuild names; any remaining group of ≥ 2 → all removed, each added to `Skipped` with Reason `name collision`, Severe true.
   - Attribute keys are bare (`"vendor"`), qualified implicitly by the driver name, as today.
   - `driver.go` call sites: `lookup` uses `usb.FindByName(d.sysfs, d.filter, res.Device)`; `preparedDevice.Serial` set only when `Identity == usb.IdentitySerial`; `publish` logs each `DuplicateSerials` entry and each `Skipped` entry with `Severe` at error level, other `Skipped` entries at `V(2)`, and the dropped count at error level when > 0.
   - `config` gains `filter usb.Filter`; `run()` sets `ExcludeClasses` from `usb.ParseExcludeClasses(usb.DefaultExcludeClasses)`.
@@ -327,7 +333,7 @@ func TestFindByName(t *testing.T)                  // "usb-239a-8029-fd14948954c
 
 - [ ] **Step 4: Verify**
   Run: `task test && golangci-lint run && go mod tidy -diff`
-  Expected: all `ok`, `0 issues.`, no diff.
+  Expected: all `ok`, lint exit 0, no diff.
 
 - [ ] **Step 5: Commit** — paths: `internal/usb cmd/usb-dra-kubeletplugin`; message `feat(usb): publish every eligible usb device with stable identity`.
 
@@ -352,7 +358,7 @@ Kind: rewrite
   Fixture devices: the RAK and both RTL-SDRs from `Discover(loadFixture(t, "talos-05-wrk"), defaultFilter)`; `dupe` = a `0bda:2838` port-identity Device with `Serial` `"35650102"` and Port `"PNP0D10:09-v2-1"`; `noserial` = a `0bda:2838` port-identity Device with `Serial` `""` and Port `"PNP0D10:07-v2-1"`; `foreign` = `cel.Device{Driver: "gpu.example.com", Attributes: {"model": {StringValue: new("x")}}}`.
 
 ```go
-func TestSelectorsCompile(t *testing.T)          // every class and claim expression: result.Error == nil
+func TestSelectorsCompile(t *testing.T)          // every non-empty class and claim expression: result.Error == nil
 func TestClassSelectorsNeverError(t *testing.T)  // every class expr × every fixture device: err == nil
 func TestClassSelectorsMatch(t *testing.T)
 	// rtl-sdr.usb.jacaudi.dev matches exactly {both RTL-SDRs, dupe, noserial}; rak4631.usb.jacaudi.dev matches exactly {RAK}
@@ -368,7 +374,7 @@ func TestSelectorsSerialPinSkipsDuplicate(t *testing.T) // rtl-sdr-35650102 does
   Expected: `go.mod` gains require lines including `github.com/google/cel-go v0.26.0`, `k8s.io/apiserver v0.34.3`, `k8s.io/component-base v0.34.3`; `github.com/fsnotify/fsnotify` changes `v1.5.1` → `v1.9.0`; no `k8s.io/*` line other than those additions changes version. Any other version change is a stop: `PLAN: BLOCKED — every path is a guess: unexpected go.mod change`.
 
 - [ ] **Step 3: Run to verify failure**
-  Run: `go test ./internal/usb/ -run 'Selector' 2>&1 | tail -3`
+  Run: `go test ./internal/usb/ -run 'Selector' 2>&1 | tail -15`
   Expected: FAIL, error opening `../../deploy/deviceclasses.yaml` (no such file).
 
 - [ ] **Step 4: Write the manifests**, spelling out `device.attributes["usb.jacaudi.dev"]`; one-line comment at the top of each file:
@@ -376,8 +382,8 @@ func TestSelectorsSerialPinSkipsDuplicate(t *testing.T) // rtl-sdr-35650102 does
   - `deploy/claims.yaml` (`ResourceClaimTemplate`, namespace `selfhosted`): `rtl-sdr-any` (request `radio`, `exactly: {deviceClassName: rtl-sdr.usb.jacaudi.dev, allocationMode: ExactCount, count: 1}`); `rtl-sdr-35650102` (same plus selector `device.attributes["usb.jacaudi.dev"].identity == "serial" && device.attributes["usb.jacaudi.dev"].serial == "35650102"`); `rak4631-lora-port` (request `lora`, class `rak4631.usb.jacaudi.dev`, selector `device.attributes["usb.jacaudi.dev"].port == "PNP0D10:02-v2-1"`).
 
 - [ ] **Step 5: Verify**
-  Run: `task test && golangci-lint run && go mod tidy -diff`
-  Expected: all `ok`, `0 issues.`, no diff.
+  Run: `task test && golangci-lint run && go mod tidy -diff && yamllint deploy/`
+  Expected: all `ok`, lint exit 0, no diff, yamllint exit 0.
 
 - [ ] **Step 6: Commit** — paths: `deploy/deviceclasses.yaml deploy/claims.yaml go.mod go.sum internal/usb/selectors_test.go`; message `feat(deploy): add usb deviceclasses and guarded example claims`.
 
@@ -398,7 +404,7 @@ func TestSelectorsSerialPinSkipsDuplicate(t *testing.T) // rtl-sdr-35650102 does
   - `func loadCheckpoint(path string) (checkpoint, error)` — missing file → `{Version: 1, Claims: {}}`, nil; `"claims": null` → empty map
   - `func (c checkpoint) save(path string) error` — atomic
   - `func (c checkpoint) with(uid string, cl checkpointClaim) checkpoint` and `func (c checkpoint) without(uid string) checkpoint` — return copies; the receiver's map is never mutated
-  - `func (c checkpoint) holder(device, port string) (uid string, ok bool)` — first claim (sorted by uid) holding a device with that name or that port
+  - `func (c checkpoint) holder(device, port, except string) (uid string, ok bool)` — any claim other than `except` holding a device with that name or that port; when several do, the lexically smallest uid
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -413,19 +419,20 @@ func TestCheckpointCopyOnWrite(t *testing.T)               // c.with(...) and c.
 func TestLoadCheckpointRejectsUnknownVersion(t *testing.T) // {"version": 2, "claims": {}} → err contains "version 2" and the file path
 func TestLoadCheckpointRejectsGarbage(t *testing.T)        // "not json" → err contains the file path
 func TestCheckpointHolder(t *testing.T)
-	// holder("usb-239a-8029-fd14948954cd1f4f", "") == ("uid-a", true); holder("other-name", "PNP0D10:02-v2-1") == ("uid-a", true);
-	// holder("x", "y") == ("", false)
+	// holder("usb-239a-8029-fd14948954cd1f4f", "", "uid-z") == ("uid-a", true); holder("other-name", "PNP0D10:02-v2-1", "uid-z") == ("uid-a", true);
+	// holder("usb-239a-8029-fd14948954cd1f4f", "", "uid-a") == ("", false); holder("x", "y", "") == ("", false)
+	// with claims "uid-a" (name N) and "uid-0" (port P): holder(N, P, "uid-a") == ("uid-0", true) and holder(N, P, "uid-0") == ("uid-a", true)
 ```
 
 - [ ] **Step 2: Run to verify failure**
-  Run: `go test ./cmd/usb-dra-kubeletplugin/ -run Checkpoint 2>&1 | tail -3`
+  Run: `go test ./cmd/usb-dra-kubeletplugin/ -run Checkpoint 2>&1 | tail -15`
   Expected: FAIL, build error `undefined: loadCheckpoint`.
 
 - [ ] **Step 3: Implement** per the spec's Prepared state section: `os.ReadFile(filepath.Clean(path))`; `json.MarshalIndent(c, "", "  ")`; save = `os.CreateTemp(filepath.Dir(path), "checkpoint-*.tmp")`, write, `Sync`, `Close`, `os.Rename` onto `path`; on any error remove the temp file and return `errors.Join` of the original error and cleanup errors. `with`/`without` use `maps.Clone`.
 
 - [ ] **Step 4: Verify**
   Run: `task test && golangci-lint run && go mod tidy -diff`
-  Expected: all `ok`, `0 issues.`, no diff.
+  Expected: all `ok`, lint exit 0, no diff.
 
 - [ ] **Step 5: Commit** — paths: `cmd/usb-dra-kubeletplugin/checkpoint.go cmd/usb-dra-kubeletplugin/checkpoint_test.go`; message `feat(kubeletplugin): add versioned atomic checkpoint`.
 
@@ -442,6 +449,7 @@ Kind: rewrite
 - Modify: `cmd/usb-dra-kubeletplugin/cdi_test.go`
 - Modify: `cmd/usb-dra-kubeletplugin/driver_test.go`
 - Create: `cmd/usb-dra-kubeletplugin/fixture_test.go`
+- Create: `cmd/usb-dra-kubeletplugin/main_test.go`
 - Modify: `deploy/daemonset.yaml`
 
 **Interfaces:**
@@ -451,7 +459,8 @@ Kind: rewrite
   - `func newDriverCore(cfg config) (*driver, error)` — builds the CDI handler and loads `filepath.Join(cfg.pluginDir, checkpointFile)`; `newDriver` calls it, then `kubeletplugin.Start`
   - `func assignAliases(devices []preparedDevice)`
   - `func parseFlags(args []string) (config, error)` — own `flag.FlagSet` (`flag.ContinueOnError`) with `klog.InitFlags(fs)`; flags `--driver-name`, `--node-name`, `--cdi-root`, `--kubelet-registrar-dir`, `--kubelet-plugin-dir`, `--sysfs-root`, `--rescan-interval` (as today), `--exclude-classes` (default `usb.DefaultExcludeClasses`), repeatable `--include`
-  - `fixture_test.go` (package `main`): `loadFixture(t, name)` reading `../../internal/usb/testdata/sysfs/<name>.tsv` and `withFile`/`without`, same contracts as Task 3's
+  - `fixture_test.go` (package `main`): `loadFixture(t, name)` reading `../../internal/usb/testdata/sysfs/<name>.tsv`, and `withFile`/`without`, with exactly the contracts written in Task 3's Interfaces block
+- File placement: `newDriverCore` in `driver.go`; `parseFlags` in `main.go`; `assignAliases` in `cdi.go`; `TestWriteClaimSpec*` and `TestAssignAliases` in `cdi_test.go`; `TestParseFlags*` in a new `main_test.go`; every other new test in `driver_test.go`. Existing `cdi_test.go` tests (`TestWriteClaimSpec`, `TestClaimSpecIsValidCDI`, `TestDeleteClaimSpec`, `TestQualifiedNames`) are kept with device names and env updated.
 - Removes: the in-memory `prepared` map.
 
 - [ ] **Step 1: Write the failing tests**
@@ -488,7 +497,7 @@ func TestCheckpointSurvivesDriverRestart(t *testing.T)
 	// driver 1 prepares uid-a; driver 2 = newDriverCore on the same dirs rejects uid-b for the RAK;
 	// driver 2 unprepares uid-a → no spec file, checkpoint has no "uid-a"
 func TestSaveFailureLeavesStateUnchanged(t *testing.T)
-	// prepare uid-a; chmod pluginDir 0500; unprepare uid-a → error; chmod 0700; driver state still holds uid-a;
+	// skip when os.Geteuid() == 0; prepare uid-a; chmod pluginDir 0500 (t.Cleanup restores 0700); unprepare uid-a → error; chmod 0700; driver state still holds uid-a;
 	// unprepare uid-a again → nil; reload checkpoint from disk → no uid-a
 func TestUnprepareUnknownClaimRemovesSpec(t *testing.T) // spec for uid-z written via cdi.writeClaimSpec only; unprepare uid-z → nil, spec gone
 func TestParseFlagsAcceptsDaemonSetArgs(t *testing.T)
@@ -500,20 +509,20 @@ func TestParseFlagsRejectsBadValues(t *testing.T)
   Existing tests: keep `TestPrepareMapsDeviceNode` (pins CDI ID format and PoolName), `TestPrepareIsIdempotent`, `TestPrepareFailsWhenDongleUnplugged` (no spec left behind), `TestPrepareIgnoresOtherDrivers`, `TestPrepareRejectsUnallocatedClaim`, `TestPrepareRejectsClaimWithNoDevicesForUs`, `TestUnprepareRemovesSpecAndIsIdempotent`, with device names updated. `TestPrepareResolvesNodeAfterReenumeration` is replaced by `TestPrepareResolvesNewNodeForKnownClaim` (it reads the removed `prepared` map).
 
 - [ ] **Step 2: Run to verify failure**
-  Run: `go test ./cmd/usb-dra-kubeletplugin/ 2>&1 | tail -3`
+  Run: `go test ./cmd/usb-dra-kubeletplugin/ 2>&1 | tail -15`
   Expected: FAIL (build errors: `undefined: newDriverCore`, `assignAliases`, `parseFlags`, unknown field `TTYs`).
 
 - [ ] **Step 3: Implement** per the spec's Prepare, Unprepare and Prepared state sections. Decided here:
   - The driver holds `state checkpoint` and `checkpointPath string`; `prepareOne` and `unprepareOne` hold `d.mu` for their whole body.
-  - Prepare order: (1) any result for this driver with `AdminAccess != nil && *AdminAccess` → error `admin access is not supported`; (2) resolve every device with `usb.FindByName`; (3) for each, `d.state.holder(name, port)` returning a uid ≠ this claim → error naming both uids and the device; (4) `assignAliases`; write the spec; (5) `next := d.state.with(uid, …)`; `next.save(path)`; on success `d.state = next`, on failure return the error (spec stays; unprepare removes it).
+  - Prepare order (resolve precedes the overlap check because the check needs each device's current port; ledger ruling B7): (1) any result for this driver with `AdminAccess != nil && *AdminAccess` → error `admin access is not supported`; (2) resolve every device with `usb.FindByName`; (3) for each, `d.state.holder(name, port, uid)` returning ok → error naming both uids and the device; (4) `assignAliases`; write the spec; (5) `next := d.state.with(uid, …)`; `next.save(path)`; on success `d.state = next`, on failure return the error (spec stays; unprepare removes it).
   - Unprepare: `cdi.deleteClaimSpec(uid)`; if `uid` is in `d.state.Claims`, `next := d.state.without(uid)`; `next.save`; on success `d.state = next`, on failure return the error with state unchanged.
   - `assignAliases` keys counters by `resourceclaim.BaseRequestRef(dev.Requests[0])`.
   - `run()` calls `parseFlags(os.Args[1:])` first, then builds clients; NODE_NAME/`--node-name` empty is an error inside `parseFlags`, checked after flag validation.
   - `deploy/daemonset.yaml` args gain `--exclude-classes=03,08,e0`.
 
 - [ ] **Step 4: Verify**
-  Run: `task test && golangci-lint run && go mod tidy -diff`
-  Expected: all `ok`, `0 issues.`, no diff.
+  Run: `task test && golangci-lint run && go mod tidy -diff && yamllint deploy/`
+  Expected: all `ok`, lint exit 0, no diff, yamllint exit 0.
 
 - [ ] **Step 5: Commit** — paths: `cmd/usb-dra-kubeletplugin deploy/daemonset.yaml`; message `feat(kubeletplugin): inject ttys with aliases and persist prepared claims`.
 
@@ -538,7 +547,7 @@ config:
   MD013: false
 ```
 
-- [ ] **Step 2: Rewrite `README.md`** for usb-dra with these sections: What it publishes (exclusion rule, both flags, hubs/vhci skipped); Identity (serial vs port, `identity` attribute, duplicate serials fall back to port identity and stop matching serial pins); Attributes (table from the spec); Selecting devices (the CEL selector rules and the three shipped examples, spelled out in full); ttys and aliases (`/dev/dra/<request>/tty<k>`, env vars, usb-serial module note: "if autoload fails, load `ch341`/`cp210x`/`ftdi_sio`/`pl2303` via Talos `machine.kernel.modules`"); Prepared state (checkpoint path; delete the file to recover from a corrupt-checkpoint startup error); Known limitations (the spec's five items); Install (`kubectl apply -f deploy/daemonset.yaml -f deploy/deviceclasses.yaml -f deploy/claims.yaml`). Do not claim the Docker build runs tests.
+- [ ] **Step 2: Rewrite `README.md`** for usb-dra with these sections: What it publishes (exclusion rule, both flags, hubs/vhci skipped); Identity (serial vs port, `identity` attribute, duplicate serials fall back to port identity and stop matching serial pins); Attributes (table from the spec); Selecting devices (the CEL selector rules and the three shipped examples, spelled out in full); ttys and aliases (`/dev/dra/<request>/tty<k>`, env vars, usb-serial module note: "if autoload fails, load `ch341`/`cp210x`/`ftdi_sio`/`pl2303` via Talos `machine.kernel.modules`"); Prepared state (checkpoint path; delete the file to recover from a corrupt-checkpoint startup error); Known limitations (the spec's five items); Install (`kubectl apply -f deploy/daemonset.yaml -f deploy/deviceclasses.yaml -f deploy/claims.yaml`). Do not claim the Docker build runs tests. Table delimiter rows use spaced pipes (`| --- | --- |`) to satisfy MD060.
 
 - [ ] **Step 3: Rewrite `.claude/CLAUDE.md`**: project name and goal for usb-dra; the Invariants section lists the spec's 12 invariants, each followed by its tests exactly as mapped here:
   1. `TestAttributesNeverExposeNodes`
@@ -547,7 +556,7 @@ config:
   4. `TestWriteClaimSpecWithTTYs`
   5. `TestPrepareIsIdempotent`, `TestUnprepareUnknownClaimRemovesSpec`
   6. `TestScanTalos01HubsOnly`, `TestScanSkipsVhciSilently`
-  7. `TestAllZeroSerialIsPortIdentity`
+  7. `TestMissingSerialIsPortIdentity`, `TestAllZeroSerialIsPortIdentity`
   8. `TestNodeResourcesCapsAt128`, `TestLongNameIsTruncatedWithHash`, `TestAttributesBoundStrings`, `TestScanSkipsOverlongPort`, `TestPortCollisionSkipsBoth`
   9. `TestScanSkipsUnreadableInterface`, `TestPrepareOneUnreadableDeviceDoesNotAffectOtherClaim`
   10. `TestClassSelectorsNeverError`, `TestSelectorsSerialPinSkipsDuplicate`
