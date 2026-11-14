@@ -1,54 +1,70 @@
-# rtlsdr-dra
+# usb-dra
 
-A Kubernetes Dynamic Resource Allocation (DRA) driver that exposes RTL-SDR dongles as
-schedulable devices, the way a GPU is exposed.
+A Kubernetes Dynamic Resource Allocation (DRA) driver (`usb.jacaudi.dev`) that publishes the
+USB devices on each node as schedulable devices, the way a GPU is exposed.
 
 ## Goal
 
-Let a pod ask for "a radio" without naming hardware, while still allowing a pod to pin
-one specific dongle when it matters.
+Let a pod ask for "a radio" or "the LoRa board" without naming hardware, while still allowing
+a pod to pin one specific device when it matters.
 
 The classic device-plugin API cannot do both. It has no selector: a pod requests a
 *count* of a resource *name*, and the kubelet chooses which device IDs to hand over.
-The only way to pin a particular dongle there is to give it its own resource name
+The only way to pin a particular device there is to give it its own resource name
 (`devic.es/rtlsdr-acars`, `devic.es/rtlsdr-vdl2`), which bakes every serial into
-cluster config. `generic-device-plugin` cannot express "N interchangeable units, each
-bound to one distinct dongle" at all — its USB matcher collects every matched path into
-one group and hands all of them to every allocatable unit.
+cluster config.
 
-DRA solves it by publishing the serial as a device **attribute**, so one driver serves
-both cases: an unpinned claim draws from the pool, and a CEL selector pins a radio.
+DRA solves it by publishing stable identity (serial, port, vendor, product) as device
+**attributes**: one driver publishes every eligible USB device, a `DeviceClass` CEL selector
+says what a device *is* (RTL-SDR, RAK4631), and a claim selector pins one device by serial or
+by port. Serial devices also get their ttys injected, with a stable alias path.
 
 ## Outcome
 
-Verified end-to-end on kind v1.34.0 against a synthetic sysfs tree and `mknod`-ed USB
-device nodes: ResourceSlice publishing, unpinned allocation, CEL serial pinning, CDI
-injection of only the allocated dongle, pool exhaustion, and release-on-delete.
-
-Not yet exercised: real RTL-SDR hardware (dongles were simulated) and multi-node
-scheduling.
+The code is built and unit-tested. Not yet exercised: real hardware, multi-node scheduling,
+and a deploy into the cluster (a home-ops follow-up).
 
 ## Invariants — do not break these
 
-These are load-bearing design decisions, each with a test asserting it. If a change
+These are load-bearing design decisions, each with the tests asserting it. If a change
 makes one of these tests fail, the change is wrong, not the test.
 
-- **Never publish the device node, bus, or devnum as a ResourceSlice attribute.** Bus
-  and device numbers change on every USB re-enumeration. A claim written against them
-  would silently select the wrong radio after a replug. Only stable identity (serial,
-  vendor, product) is published.
-- **Resolve the device node at prepare time by looking up the serial**, never from a
-  path captured when the slice was published. The dongle may have re-enumerated in
-  between.
-- **A node with no dongles still publishes an empty pool.** "Pool with no devices"
-  means the driver is healthy and has no radios; "no pool" means the driver is absent.
-  Publishing nothing also leaves a stale slice when the last dongle is pulled.
-- **Never pin `major`/`minor` in the CDI spec.** CDI's `fillMissingInfo()` stats the
-  host path, which is what keeps injection correct across re-enumeration.
-- **Skip dongles with no serial.** Without one there is no durable identity to select
-  on, and a pinned claim would be unsatisfiable.
-- Prepare and unprepare must both be **idempotent** — the kubelet retries after a
-  restart.
+1. **Never publish the device node, bus number, devnum, tty names or tty aliases.** They
+   change on every re-enumeration; a claim written against them would silently select the
+   wrong device after a replug. Tests: `TestAttributesNeverExposeNodes`.
+2. **Resolve devices at prepare time by device name from a fresh scan, on every Prepare,
+   including for claims already in the checkpoint.** The device may have re-enumerated since
+   it was published. Tests: `TestPrepareResolvesNewNodeForKnownClaim`.
+3. **A node with no eligible devices publishes an empty pool.** "Pool with no devices"
+   means the driver is healthy; "no pool" means the driver is absent. Tests:
+   `TestNodeResourcesPublishesEmptyPool`.
+4. **CDI device nodes carry no major, minor, UID, GID or file mode.** CDI fills them from the
+   host node, which keeps injection correct across re-enumeration. Tests:
+   `TestWriteClaimSpecWithTTYs`.
+5. **Prepare and unprepare are idempotent; unprepare always removes the spec and checkpoint
+   entry by claim UID.** The kubelet retries after a restart. Tests:
+   `TestPrepareIsIdempotent`, `TestUnprepareUnknownClaimRemovesSpec`.
+6. **Hubs and vhci devices are never published.** Tests: `TestScanTalos01HubsOnly`,
+   `TestScanSkipsVhciSilently`.
+7. **Devices without a usable serial get port identity and `identity=port`.** Tests:
+   `TestMissingSerialIsPortIdentity`, `TestAllZeroSerialIsPortIdentity`.
+8. **The published slice is valid by construction:** DNS-label names at most 63 characters,
+   unique, at most 128 devices, every string attribute at most 64 bytes. The API server rejects
+   an invalid slice whole and the helper only logs it. Tests: `TestNodeResourcesCapsAt128`,
+   `TestLongNameIsTruncatedWithHash`, `TestAttributesBoundStrings`,
+   `TestScanSkipsOverlongPort`, `TestPortCollisionSkipsBoth`.
+9. **One unreadable device never fails the scan or another device's prepare.** Tests:
+   `TestScanSkipsUnreadableInterface`,
+   `TestPrepareOneUnreadableDeviceDoesNotAffectOtherClaim`.
+10. **Shipped selectors guard `device.driver` and optional attributes.** A reference to a
+    missing attribute aborts allocation. Tests: `TestClassSelectorsNeverError`,
+    `TestSelectorsSerialPinSkipsDuplicate`.
+11. **Prepared state survives a driver restart:** the checkpoint is written atomically and
+    loaded before registration. Tests: `TestCheckpointSurvivesDriverRestart`,
+    `TestSaveFailureLeavesStateUnchanged`.
+12. **A device prepared for one claim is never prepared for another; admin-access results are
+    rejected.** Tests: `TestPrepareRejectsDeviceHeldByOtherClaim`,
+    `TestPrepareRejectsSamePortUnderNewName`, `TestPrepareRejectsAdminAccess`.
 
 ## Deployment gotchas
 
@@ -66,34 +82,50 @@ tests or `kubectl apply --dry-run=server`.
 
 ## Layout
 
-- `internal/rtlsdr/usb.go` — sysfs discovery. Filters interface directories (names
-  containing `:`), hubs, and serial-less devices. `usb_real_test.go` holds a verbatim
-  capture from a real Dell R730 node; keep it as the regression fixture.
-- `internal/rtlsdr/slice.go` — device → ResourceSlice attributes.
-- `cmd/rtlsdr-dra-kubeletplugin/` — kubelet plugin, CDI spec generation, prepare state.
-- `deploy/` — DaemonSet + RBAC, DeviceClass + example claim templates.
+- `internal/usb/sysfs.go` — sysfs discovery. Skips interface directories (names containing
+  `:`), hubs and vhci devices; computes controller, revision and port; reads interfaces and
+  ttys, ordered numerically.
+- `internal/usb/filter.go` — `--exclude-classes` and `--include` parsing and the publish
+  decision.
+- `internal/usb/identity.go` — serial vs port identity, device names, uniqueness.
+- `internal/usb/usb.go` — `Discover`, `FindByName` and the `Device` type.
+- `internal/usb/slice.go` — device to ResourceSlice attributes, the 128-device cap, and the
+  always-present pool.
+- `internal/usb/selectors_test.go` — compiles every selector in `deploy/` with the DRA CEL
+  package and evaluates them the way the allocator does.
+- `internal/usb/testdata/sysfs/` — captures from talos-01-cp and talos-05-wrk; keep them as
+  regression fixtures.
+- `cmd/usb-dra-kubeletplugin/main.go` — flags, startup, rescan loop.
+- `cmd/usb-dra-kubeletplugin/driver.go` — prepare (resolve, overlap check, spec, checkpoint)
+  and unprepare.
+- `cmd/usb-dra-kubeletplugin/cdi.go` — CDI spec generation: USB node, ttys, aliases, env.
+- `cmd/usb-dra-kubeletplugin/checkpoint.go` — versioned atomic prepared-claim checkpoint.
+- `deploy/` — DaemonSet + RBAC, example DeviceClasses, example claim templates.
 
-Device names are `rtlsdr-<lowercased serial>` and must remain valid DNS labels.
+Device names are `usb-<vid>-<pid>-<id>` and must remain valid DNS labels of at most 63
+characters.
 
 ## Commands
 
 ```sh
-go test ./...                  # 27 tests; all must pass
+task test                      # go test
+task ci                        # everything CI runs
 go vet ./...
-docker build -t rtlsdr-dra .   # runs the tests inside the build
+docker build -t usb-dra .      # does NOT run tests: .dockerignore strips testdata and *_test.go
 kubectl apply --dry-run=server -f deploy/   # schema + CEL validation
 ```
 
-Pin `k8s.io/*` deps to the minor version of the target cluster (currently v0.34.x for
-Kubernetes 1.34).
+`k8s.io/*` stays v0.34.x while the cluster runs 1.35; bumping is a separate change.
 
 ## Duplicate serials
 
-RTL-SDR sticks ship with factory serial `00000001`. Two un-reprogrammed dongles on one
-host make a pinned claim ambiguous. `Discover` returns them via its `duplicates` return
-and the driver logs an error. Fix with `rtl_eeprom -s <serial>` followed by a
-**physical replug** — the EEPROM is only re-read at power-up, so re-enumeration alone
-is not enough.
+Two devices with the same serial (RTL-SDR sticks ship with the factory serial `00000001`), or
+serials equal after case-folding or sanitizing, cannot be told apart by serial. Every device
+sharing the final name falls back to port identity (`identity=port`) and the driver logs an
+error naming the serial. A claim pinned with `identity == "serial" && serial == "<serial>"`
+then matches neither device instead of picking one. Any names that still collide after the
+fallback are all skipped. Fix with `rtl_eeprom -s <serial>` followed by a **physical
+replug** — the EEPROM is only re-read at power-up, so re-enumeration alone is not enough.
 
 ## Git identity
 
