@@ -20,7 +20,8 @@ device, except:
   keyboard or a Bluetooth dongle is never claimable by accident. Only interface classes
   count, never `bDeviceClass`: real devices report `00` or `ef` there.
 - **Unconfigured devices** with no interface entries, and devices whose attribute files
-  cannot be read mid-enumeration. These are skipped for that scan and logged.
+  cannot be read mid-enumeration. These are skipped for that scan and logged at `-v=2`; an
+  entry missing one of its identity files is dropped silently.
 
 Two flags tune the filter:
 
@@ -231,9 +232,10 @@ Kubernetes `$(VAR)` expansion does not see CDI environment variables, which is w
 alias path exists: point your application at `/dev/dra/<request>/tty0`.
 
 A device with no bound tty is injected with its USB node only; prepare does not fail.
-`ttyUSB*` needs the usb-serial driver bound. On Talos, `cdc_acm` is built in, and `ch341`,
-`cp210x`, `ftdi_sio` and `pl2303` are modules that udev autoloads by modalias. If autoload
-fails, load `ch341`/`cp210x`/`ftdi_sio`/`pl2303` via Talos `machine.kernel.modules`.
+`ttyUSB*` needs the usb-serial driver bound. On Talos 1.12 `cdc_acm` is built in; `ch341`,
+`cp210x`, `ftdi_sio` and `pl2303` are modules that udev should autoload by modalias, which has
+not been exercised on real hardware. If the tty does not appear, load the module via Talos
+`machine.kernel.modules`.
 
 ## Prepared state
 
@@ -246,7 +248,8 @@ a driver restart.
 Each device entry records the device name, the request, and the port. On prepare, the driver
 resolves each allocated device by name from a fresh sysfs scan, then refuses any device that
 another claim already holds in the checkpoint, matching on device name or on port (so a device
-that comes back under a new name on the same port is still caught). Re-preparing a known claim
+that comes back under a new name on the same port is still caught) unless the holder's device
+is attached on a different port now. Re-preparing a known claim
 rewrites its CDI spec, which rebuilds the spec after a node reboot empties `/var/run/cdi`.
 Allocation results with `adminAccess` are rejected, because two processes sharing a USB device
 or tty corrupt each other. Unprepare always removes the spec and checkpoint entry by claim
@@ -267,6 +270,8 @@ restart the pod; the kubelet's own state still drives unprepare.
   container restart, so a restarted container gets the paths resolved at the last prepare.
 - **Port-identity swaps.** Two identical devices without usable serials swap identities if
   they swap ports.
+- **Moved while claimed.** A port-identity device moved to another port while claimed is a new
+  device to the driver and can be prepared for a second claim.
 - **tty alias collisions.** Two claims in one container that reuse a request name collide on
   `/dev/dra/<request>/`; the runtime applies the last one without error. Use distinct request
   names.
@@ -278,6 +283,11 @@ restart the pod; the kubelet's own state still drives unprepare.
 ```sh
 kubectl apply -f deploy/daemonset.yaml -f deploy/deviceclasses.yaml -f deploy/claims.yaml
 ```
+
+`deploy/claims.yaml` targets the namespace `selfhosted`; edit it to match yours.
+
+Do not also expose these devices through generic-device-plugin: both would allocate the same
+board.
 
 Requires Kubernetes 1.34 or later (`resource.k8s.io/v1`) with DRA enabled on the kubelet. The
 DaemonSet runs as root and privileged on every node: the plugin socket and CDI directory are
@@ -297,3 +307,6 @@ Applying the new manifests does not remove the old driver's objects. Delete them
 
 Claims written against `sdr.jacaudi.dev` attributes or the old class must be rewritten for the
 `usb.jacaudi.dev` attributes and the `rtl-sdr.usb.jacaudi.dev` class.
+
+The injected environment variables were renamed: `RTLSDR_SERIAL` and `RTLSDR_DEVNODE` are now
+`USB_SERIAL` and `USB_DEVNODE`; update any container that reads them.
