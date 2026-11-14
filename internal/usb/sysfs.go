@@ -93,7 +93,8 @@ func readCandidate(fsys fs.FS, f Filter, name string, names []string) (candidate
 	bus, busErr := strconv.Atoi(ids[2])
 	dev, devErr := strconv.Atoi(ids[3])
 	class, classErr := readAttr(fsys, dir, "bDeviceClass")
-	if busErr != nil || devErr != nil || classErr != nil {
+	vendor, product := strings.ToLower(ids[0]), strings.ToLower(ids[1])
+	if busErr != nil || devErr != nil || classErr != nil || !isLowerHex(vendor, 4) || !isLowerHex(product, 4) {
 		return candidate{}, &Skip{Dir: name, Reason: reasonUnreadableDevice}, false
 	}
 	if class == hubClass {
@@ -113,8 +114,8 @@ func readCandidate(fsys fs.FS, f Filter, name string, names []string) (candidate
 
 	c := candidate{
 		Dir:        name,
-		Vendor:     strings.ToLower(ids[0]),
-		Product:    strings.ToLower(ids[1]),
+		Vendor:     vendor,
+		Product:    product,
 		Interfaces: intfs,
 		Bus:        bus,
 		Dev:        dev,

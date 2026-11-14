@@ -52,7 +52,7 @@ makes one of these tests fail, the change is wrong, not the test.
    unique, at most 128 devices, every string attribute at most 64 bytes. The API server rejects
    an invalid slice whole and the helper only logs it. Tests: `TestNodeResourcesCapsAt128`,
    `TestLongNameIsTruncatedWithHash`, `TestAttributesBoundStrings`,
-   `TestScanSkipsOverlongPort`, `TestPortCollisionSkipsBoth`.
+   `TestScanSkipsOverlongPort`, `TestScanSkipsMalformedIDs`, `TestPortCollisionSkipsBoth`.
 9. **One unreadable device never fails the scan or another device's prepare.** Tests:
    `TestScanSkipsUnreadableInterface`,
    `TestPrepareOneUnreadableDeviceDoesNotAffectOtherClaim`.

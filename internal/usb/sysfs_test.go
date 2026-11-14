@@ -260,3 +260,19 @@ func TestPortRevision(t *testing.T) {
 		})
 	}
 }
+
+func TestScanSkipsMalformedIDs(t *testing.T) {
+	tests := []struct{ name, attr, value string }{
+		{"non-hex vendor", "idVendor", "zzzz"},
+		{"overlong vendor", "idVendor", strings.Repeat("a", 70)},
+		{"non-hex product", "idProduct", "zzzz"},
+		{"overlong product", "idProduct", strings.Repeat("a", 70)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assertSkipsOnly(t, func(fsys fstest.MapFS) {
+				withFile(fsys, "5-1/"+tt.attr, tt.value)
+			}, Skip{Dir: "5-1", Reason: "unreadable device"})
+		})
+	}
+}
