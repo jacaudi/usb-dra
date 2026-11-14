@@ -1,4 +1,4 @@
-module github.com/jacaudi/rtlsdr-dra
+module github.com/jacaudi/usb-dra
 
 go 1.26
 

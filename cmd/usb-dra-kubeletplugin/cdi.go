@@ -9,7 +9,7 @@ import (
 )
 
 // cdiClass groups every device this driver injects.
-const cdiClass = "rtlsdr"
+const cdiClass = "usb"
 
 // cdiHandler writes the CDI specs that map a dongle's character device into the
 // container. The kubelet passes the qualified CDI names to the runtime, which
@@ -46,9 +46,9 @@ func (c *cdiHandler) writeClaimSpec(claimUID string, devices []preparedDevice) e
 					Permissions: "rw",
 				}},
 				Env: []string{
-					// Lets the container target its own dongle, e.g. rtl_tcp -d "$RTLSDR_SERIAL".
-					fmt.Sprintf("RTLSDR_SERIAL=%s", d.Serial),
-					fmt.Sprintf("RTLSDR_DEVNODE=%s", d.DevNode),
+					// Lets the container target its own dongle, e.g. rtl_tcp -d "$USB_SERIAL".
+					fmt.Sprintf("USB_SERIAL=%s", d.Serial),
+					fmt.Sprintf("USB_DEVNODE=%s", d.DevNode),
 				},
 			},
 		})

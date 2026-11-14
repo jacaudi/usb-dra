@@ -13,7 +13,7 @@ const testClaimUID = "5f4ebd22-3fc4-45f9-a00c-1c5c6b6b6792"
 
 func TestWriteClaimSpec(t *testing.T) {
 	dir := t.TempDir()
-	h, err := newCDIHandler(dir, "sdr.jacaudi.dev")
+	h, err := newCDIHandler(dir, "usb.jacaudi.dev")
 	if err != nil {
 		t.Fatalf("newCDIHandler: %v", err)
 	}
@@ -50,8 +50,8 @@ func TestWriteClaimSpec(t *testing.T) {
 		t.Errorf("spec pins major/minor; these must be resolved at injection:\n%s", spec)
 	}
 	// The serial env lets the container target its own dongle.
-	if !strings.Contains(spec, "RTLSDR_SERIAL=35650102") {
-		t.Errorf("spec is missing RTLSDR_SERIAL:\n%s", spec)
+	if !strings.Contains(spec, "USB_SERIAL=35650102") {
+		t.Errorf("spec is missing USB_SERIAL:\n%s", spec)
 	}
 	// The CDI device name must be claim-scoped so two claims never collide.
 	if !strings.Contains(spec, testClaimUID+"-rtlsdr-35650102") {
@@ -61,7 +61,7 @@ func TestWriteClaimSpec(t *testing.T) {
 
 func TestClaimSpecIsValidCDI(t *testing.T) {
 	dir := t.TempDir()
-	h, err := newCDIHandler(dir, "sdr.jacaudi.dev")
+	h, err := newCDIHandler(dir, "usb.jacaudi.dev")
 	if err != nil {
 		t.Fatalf("newCDIHandler: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestClaimSpecIsValidCDI(t *testing.T) {
 
 func TestDeleteClaimSpec(t *testing.T) {
 	dir := t.TempDir()
-	h, err := newCDIHandler(dir, "sdr.jacaudi.dev")
+	h, err := newCDIHandler(dir, "usb.jacaudi.dev")
 	if err != nil {
 		t.Fatalf("newCDIHandler: %v", err)
 	}
@@ -119,13 +119,13 @@ func TestDeleteClaimSpec(t *testing.T) {
 }
 
 func TestQualifiedNames(t *testing.T) {
-	h, err := newCDIHandler(t.TempDir(), "sdr.jacaudi.dev")
+	h, err := newCDIHandler(t.TempDir(), "usb.jacaudi.dev")
 	if err != nil {
 		t.Fatalf("newCDIHandler: %v", err)
 	}
 
 	got := h.qualifiedNames(testClaimUID, []string{"rtlsdr-35650102"})
-	want := "k8s.sdr.jacaudi.dev/rtlsdr=" + testClaimUID + "-rtlsdr-35650102"
+	want := "k8s.usb.jacaudi.dev/usb=" + testClaimUID + "-rtlsdr-35650102"
 	if len(got) != 1 || got[0] != want {
 		t.Errorf("qualifiedNames = %v, want [%s]", got, want)
 	}

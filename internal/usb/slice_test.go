@@ -1,4 +1,4 @@
-package rtlsdr
+package usb
 
 import (
 	"testing"

@@ -1,4 +1,4 @@
-package rtlsdr
+package usb
 
 import (
 	resourceapi "k8s.io/api/resource/v1"
@@ -8,8 +8,8 @@ import (
 // DriverName is the DRA driver name. Attributes published without a domain prefix
 // are implicitly qualified by it, so a claim selects on:
 //
-//	device.attributes["sdr.jacaudi.dev"].serial == "35650102"
-const DriverName = "sdr.jacaudi.dev"
+//	device.attributes["usb.jacaudi.dev"].serial == "35650102"
+const DriverName = "usb.jacaudi.dev"
 
 // Attributes describes the dongle to CEL selectors in a ResourceClaim.
 //

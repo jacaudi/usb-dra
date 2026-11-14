@@ -12,7 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
 
-	"github.com/jacaudi/rtlsdr-dra/internal/rtlsdr"
+	"github.com/jacaudi/usb-dra/internal/usb"
 )
 
 // sysfsWith builds a fake sysfs containing the given dongles.
@@ -21,7 +21,7 @@ func sysfsWith(devs ...[5]string) fstest.MapFS {
 	for _, d := range devs {
 		dir, vendor, product, serial, busdev := d[0], d[1], d[2], d[3], d[4]
 		bus, dev, _ := strings.Cut(busdev, "/")
-		base := rtlsdr.SysfsUSBDir + "/" + dir
+		base := usb.SysfsUSBDir + "/" + dir
 		fsys[base+"/idVendor"] = &fstest.MapFile{Data: []byte(vendor)}
 		fsys[base+"/idProduct"] = &fstest.MapFile{Data: []byte(product)}
 		fsys[base+"/serial"] = &fstest.MapFile{Data: []byte(serial)}
@@ -34,7 +34,7 @@ func sysfsWith(devs ...[5]string) fstest.MapFS {
 func newTestDriver(t *testing.T, fsys fstest.MapFS) (*driver, string) {
 	t.Helper()
 	dir := t.TempDir()
-	cdi, err := newCDIHandler(dir, rtlsdr.DriverName)
+	cdi, err := newCDIHandler(dir, usb.DriverName)
 	if err != nil {
 		t.Fatalf("newCDIHandler: %v", err)
 	}
@@ -42,7 +42,7 @@ func newTestDriver(t *testing.T, fsys fstest.MapFS) (*driver, string) {
 		cdi:        cdi,
 		sysfs:      fsys,
 		nodeName:   "talos-01-cp",
-		driverName: rtlsdr.DriverName,
+		driverName: usb.DriverName,
 		prepared:   map[types.UID][]preparedDevice{},
 	}, dir
 }
@@ -61,7 +61,7 @@ func claimFor(uid string, results ...resourceapi.DeviceRequestAllocationResult) 
 func allocResult(device string) resourceapi.DeviceRequestAllocationResult {
 	return resourceapi.DeviceRequestAllocationResult{
 		Request: "radio",
-		Driver:  rtlsdr.DriverName,
+		Driver:  usb.DriverName,
 		Pool:    "talos-01-cp",
 		Device:  device,
 	}
@@ -88,7 +88,7 @@ func TestPrepareMapsDeviceNode(t *testing.T) {
 	if len(got.Requests) != 1 || got.Requests[0] != "radio" {
 		t.Errorf("Requests = %v, want [radio]", got.Requests)
 	}
-	want := "k8s.sdr.jacaudi.dev/rtlsdr=uid-1-rtlsdr-35650102"
+	want := "k8s.usb.jacaudi.dev/usb=uid-1-rtlsdr-35650102"
 	if len(got.CDIDeviceIDs) != 1 || got.CDIDeviceIDs[0] != want {
 		t.Errorf("CDIDeviceIDs = %v, want [%s]", got.CDIDeviceIDs, want)
 	}
