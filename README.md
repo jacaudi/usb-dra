@@ -1,86 +1,299 @@
-# rtlsdr-dra
+# usb-dra
 
 A Kubernetes [DRA](https://kubernetes.io/docs/concepts/scheduling-eviction/dynamic-resource-allocation/)
-driver that exposes RTL-SDR dongles the way a GPU is exposed: as a pool of schedulable
-devices you request, not a per-serial resource name you hardcode.
+driver (`usb.jacaudi.dev`) that publishes the USB devices attached to each node as schedulable
+devices, the way a GPU is exposed. A pod asks for "a radio" or "the LoRa board", or pins one
+physical device by serial or port, instead of hardcoding a per-device resource name.
+
+The driver does not decide what a device is. It publishes every eligible device with stable
+identity attributes; a `DeviceClass` CEL selector on vendor and product defines a device type.
+
+## What it publishes
+
+A DaemonSet scans `/sys/bus/usb/devices` on every node and publishes one device per USB
+device, except:
+
+- **Hubs.** Any device with `bDeviceClass` `09`, root hubs included. No flag overrides this.
+- **USB/IP devices.** Anything behind a `vhci_hcd` controller.
+- **Excluded classes.** A device is hidden when every one of its interface classes is in the
+  excluded set. The default is `03,08,e0` (HID, mass storage, wireless controller), so a
+  keyboard or a Bluetooth dongle is never claimable by accident. Only interface classes
+  count, never `bDeviceClass`: real devices report `00` or `ef` there.
+- **Unconfigured devices** with no interface entries, and devices whose attribute files
+  cannot be read mid-enumeration. These are skipped for that scan and logged.
+
+Two flags tune the filter:
+
+| Flag | Default | Meaning |
+| --- | --- | --- |
+| `--exclude-classes` | `03,08,e0` | Comma-separated interface classes, each two lowercase hex digits. Replaces the default; an empty value publishes everything except hubs and vhci devices. |
+| `--include` | none | Repeatable `vid:pid` or `vid:pid:serial` (four lowercase hex digits each; the serial may contain `:` and compares case-insensitively). A matching device is published whatever its interface classes. |
+
+An invalid value for either flag is a startup error. The other flags are `--driver-name`,
+`--node-name` (default `$NODE_NAME`), `--cdi-root`, `--kubelet-registrar-dir`,
+`--kubelet-plugin-dir`, `--sysfs-root` and `--rescan-interval`; see `--help`.
+
+A node with no eligible devices still publishes an empty pool. "Pool with no devices" tells
+the scheduler the driver is healthy and has nothing to offer, which differs from "no pool at
+all", and it avoids leaving a stale slice behind when the last device is unplugged.
+
+## Identity
+
+Every device gets a name `usb-<vid>-<pid>-<id>`, lowercased and sanitized to a DNS label (a
+name over 63 characters is truncated and suffixed with a short hash).
+
+- **Serial identity.** The device has a usable serial: non-empty, valid UTF-8, at most 64
+  bytes, and not all zeros. `<id>` is the serial, for example `usb-0bda-2838-35650102`.
+- **Port identity.** Everything else. `<id>` is `p-<port>`, for example
+  `usb-1a86-7523-p-0000-00-14-0-v2-1-4`.
+
+The `identity` attribute says which one a device has (`serial` or `port`).
+
+**Duplicate serials.** If two devices end up with the same name (a shared serial, or serials
+that are equal after case-folding or sanitizing), every one of them falls back to port
+identity and the duplicate is logged as an error naming the serial. The `serial` attribute is
+still published on them, but their `identity` is `port`, so a claim pinned with the shipped
+serial idiom (`identity == "serial" && serial == "..."`) stops matching either device rather
+than matching one of them. An already prepared claim keeps its spec until its next prepare,
+which then fails with "no longer attached". Fix the serials and replug.
+
+RTL-SDR sticks ship with the factory serial `00000001`. Reprogram one with
+`rtl_eeprom -s <new-serial>` and **physically replug**; the EEPROM is only re-read at
+power-up, so re-enumeration alone is not enough.
+
+Swapping two identical port-identity devices between ports swaps their identities with no
+error; the `identity` attribute exists so a claim author can see this coming.
+
+## Attributes
+
+All attributes are strings under `device.attributes["usb.jacaudi.dev"]`.
+
+| Key | When | Bound | Example |
+| --- | --- | --- | --- |
+| `vendor` | always | 4 chars | `239a` |
+| `product` | always | 4 chars | `8029` |
+| `identity` | always | | `serial` or `port` |
+| `port` | always; a device whose port exceeds 64 bytes is skipped and logged | 64 bytes | `PNP0D10:02-v2-1` |
+| `serial` | when non-empty, valid UTF-8, at most 64 bytes and not all zeros (duplicates included) | 64 bytes | `FD14948954CD1F4F` |
+| `manufacturer` | when reported and valid UTF-8; truncated on a rune boundary | 64 bytes | `RAKwireless` |
+| `productName` | same as `manufacturer` | 64 bytes | `WisCore RAK4631 Board` |
+| `interfaceClasses` | when at most 64 bytes; sorted unique, comma-joined | 64 bytes | `02,0a` |
+
+`port` is `<controller>-v<revision>-<port chain>`: the controller is the root hub's `serial`
+(the kernel sets it to the controller's bus name), the revision is the USB generation derived
+from the bus speed, and the chain is the device's path below the bus. The bus number is never
+part of it. A SuperSpeed device that falls back to high speed changes revision and therefore
+port.
+
+Never published: the device node, bus number, device number, tty names and tty aliases. They
+change on every re-enumeration, so a claim written against them could silently select the
+wrong device after a replug.
+
+## Selecting devices
+
+An **unpinned** claim draws any free device of its DeviceClass. A **CEL selector** on the
+request pins one specific device by serial or by port. A claim holds one device per
+allocation, so one claim per pod means one pod per device; the scheduler places the pod on
+whichever node holds the allocated device.
+
+Two things make a CEL selector safe or not:
+
+- A reference to an attribute a device lacks aborts allocation ("no such key"), and class
+  selectors are evaluated against devices of every driver.
+- So: every DeviceClass selector starts with `device.driver == "usb.jacaudi.dev"` joined to
+  the rest with `&&`; pin by serial with `identity == "serial" && serial == "<serial>"`; pin by
+  port with `port == "<port>"` (`port` is always present); and reference `serial`,
+  `manufacturer`, `productName` and `interfaceClasses` only behind `identity == "serial"` (for
+  `serial`) or `has(...)`.
+
+CEL has no alias for the attribute map, so selectors spell it out. The shipped examples:
+
+Any RTL-SDR (`deploy/deviceclasses.yaml`, then `deploy/claims.yaml`):
 
 ```yaml
-# any free radio
-requests:
-  - name: radio
-    exactly: { deviceClassName: rtl-sdr.jacaudi.dev, allocationMode: ExactCount, count: 1 }
-
-# ...or one specific stick
-            selectors:
-              - cel:
-                  expression: device.attributes["sdr.jacaudi.dev"].serial == "35650102"
+apiVersion: resource.k8s.io/v1
+kind: DeviceClass
+metadata:
+  name: rtl-sdr.usb.jacaudi.dev
+spec:
+  selectors:
+    - cel:
+        expression: >-
+          device.driver == "usb.jacaudi.dev" &&
+          device.attributes["usb.jacaudi.dev"].vendor == "0bda" &&
+          device.attributes["usb.jacaudi.dev"].product in ["2838", "2832"]
+---
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata:
+  name: rtl-sdr-any
+  namespace: selfhosted
+spec:
+  spec:
+    devices:
+      requests:
+        - name: radio
+          exactly:
+            deviceClassName: rtl-sdr.usb.jacaudi.dev
+            allocationMode: ExactCount
+            count: 1
 ```
 
-## Why not a device plugin
+One RTL-SDR pinned by serial:
 
-The classic device-plugin API has no selector: a pod asks for a *count* of a resource
-*name* and the kubelet picks the IDs. The only way to pin a particular dongle is to
-give it its own resource name (`devic.es/rtlsdr-acars`, `devic.es/rtlsdr-vdl2`), which
-means every serial is baked into cluster config.
+```yaml
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata:
+  name: rtl-sdr-35650102
+  namespace: selfhosted
+spec:
+  spec:
+    devices:
+      requests:
+        - name: radio
+          exactly:
+            deviceClassName: rtl-sdr.usb.jacaudi.dev
+            allocationMode: ExactCount
+            count: 1
+            selectors:
+              - cel:
+                  expression: >-
+                    device.attributes["usb.jacaudi.dev"].identity == "serial" &&
+                    device.attributes["usb.jacaudi.dev"].serial == "35650102"
+```
 
-DRA publishes the serial as a device **attribute** instead, so one driver serves both
-cases: unpinned claims draw from the pool, and a CEL selector pins a specific radio.
+The RAK4631 LoRa board pinned by port (it has a usable serial, but the port pin also works
+for devices that have none):
 
-## How it works
+```yaml
+apiVersion: resource.k8s.io/v1
+kind: DeviceClass
+metadata:
+  name: rak4631.usb.jacaudi.dev
+spec:
+  selectors:
+    - cel:
+        expression: >-
+          device.driver == "usb.jacaudi.dev" &&
+          device.attributes["usb.jacaudi.dev"].vendor == "239a" &&
+          device.attributes["usb.jacaudi.dev"].product == "8029"
+---
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata:
+  name: rak4631-lora-port
+  namespace: selfhosted
+spec:
+  spec:
+    devices:
+      requests:
+        - name: lora
+          exactly:
+            deviceClassName: rak4631.usb.jacaudi.dev
+            allocationMode: ExactCount
+            count: 1
+            selectors:
+              - cel:
+                  expression: device.attributes["usb.jacaudi.dev"].port == "PNP0D10:02-v2-1"
+```
 
-1. A DaemonSet scans `/sys/bus/usb/devices` on every node for `0bda:2838` dongles.
-2. Each dongle becomes one device in that node's pool, named `rtlsdr-<serial>`, with
-   `serial`, `vendor`, `product` (and `manufacturer`/`productName` when reported) as
-   attributes.
-3. On `NodePrepareResources` the driver writes a CDI spec mapping the dongle's
-   character device into the container and injects `RTLSDR_SERIAL`, so a container can
-   target its own radio (`rtl_tcp -d "$RTLSDR_SERIAL"`).
+There is deliberately no match-all DeviceClass: it would let any namespace claim any
+published device. Add one class per device family you want to hand out.
 
-### Two deliberate design choices
+## ttys and aliases
 
-**The device node is never published as an attribute.** Bus and device numbers change
-on every re-enumeration, so a claim written against them would silently select the
-wrong radio after a replug. Only stable identity is published; the node is resolved
-fresh from the serial at prepare time.
+On prepare, the driver maps the device into the container through a per-claim CDI spec:
 
-**A node with no dongles still publishes an empty pool.** "Pool with no devices" tells
-the scheduler the driver is healthy and simply has no radios, which is different from
-"no pool at all", and it avoids leaving a stale slice when the last dongle is pulled.
+- the USB node `/dev/bus/usb/BBB/DDD`;
+- every tty under the device's interfaces (`ttyACM*` from `cdc_acm`, `ttyUSB*` from
+  usb-serial drivers), interfaces ordered by `bInterfaceNumber` and ttys within an interface by
+  numeric suffix, each injected at `/dev/<name>`;
+- each tty again at a stable alias `/dev/dra/<request>/tty<k>`. `<request>` is the claim
+  request name (the part before `/` for a prioritized-list subrequest); `<k>` counts from 0
+  across every tty of every device allocated to that request. A RAK4631 claimed by a request
+  named `lora` appears at `/dev/dra/lora/tty0`.
+
+Device nodes carry only a host path, a container path and `rw` permissions. Major, minor,
+UID, GID and file mode are left for the runtime to fill from the host node, which keeps
+injection correct across re-enumeration.
+
+Environment variables, per device:
+
+| Variable | Value |
+| --- | --- |
+| `USB_DEVNODE` | The USB node, `/dev/bus/usb/BBB/DDD`. |
+| `USB_SERIAL` | The serial; set for serial-identity devices only. |
+| `USB_TTY` | The host path of the device's first tty, when it has one. |
+
+A claim holding two devices from this driver gets their `USB_*` variables merged per key.
+Kubernetes `$(VAR)` expansion does not see CDI environment variables, which is why the
+alias path exists: point your application at `/dev/dra/<request>/tty0`.
+
+A device with no bound tty is injected with its USB node only; prepare does not fail.
+`ttyUSB*` needs the usb-serial driver bound. On Talos, `cdc_acm` is built in, and `ch341`,
+`cp210x`, `ftdi_sio` and `pl2303` are modules that udev autoloads by modalias. If autoload
+fails, load `ch341`/`cp210x`/`ftdi_sio`/`pl2303` via Talos `machine.kernel.modules`.
+
+## Prepared state
+
+The driver records every prepared claim in `checkpoint.json` in its plugin data directory,
+`/var/lib/kubelet/plugins/usb.jacaudi.dev/checkpoint.json`. It is written atomically (temp
+file, sync, rename) after the claim's CDI spec on prepare and after the spec is removed on
+unprepare, and loaded once at startup before the plugin registers, so prepared state survives
+a driver restart.
+
+Each device entry records the device name, the request, and the port. On prepare, the driver
+resolves each allocated device by name from a fresh sysfs scan, then refuses any device that
+another claim already holds in the checkpoint, matching on device name or on port (so a device
+that comes back under a new name on the same port is still caught). Re-preparing a known claim
+rewrites its CDI spec, which rebuilds the spec after a node reboot empties `/var/run/cdi`.
+Allocation results with `adminAccess` are rejected, because two processes sharing a USB device
+or tty corrupt each other. Unprepare always removes the spec and checkpoint entry by claim
+UID, and succeeds for an unknown claim.
+
+A missing checkpoint is an empty state. An unreadable, unparseable or unknown-version file
+stops the driver at startup with an error naming the file. To recover, delete the file and
+restart the pod; the kubelet's own state still drives unprepare.
+
+## Known limitations
+
+- **Running containers keep their device nodes.** runc creates nodes by major:minor, and tty
+  minors are reused lowest-free. If a board re-enumerates while its container runs, that
+  container's `/dev/ttyACM0` can end up pointing at another board. The driver re-resolves only
+  at prepare. The upstream signals for this (resource health, device taints) are alpha and
+  disabled on the 1.35 cluster.
+- **Container restarts reuse the prepared spec.** The kubelet does not re-prepare for a
+  container restart, so a restarted container gets the paths resolved at the last prepare.
+- **Port-identity swaps.** Two identical devices without usable serials swap identities if
+  they swap ports.
+- **tty alias collisions.** Two claims in one container that reuse a request name collide on
+  `/dev/dra/<request>/`; the runtime applies the last one without error. Use distinct request
+  names.
+- **Env merging.** A claim holding two devices from this driver gets their `USB_*` variables
+  merged per key.
 
 ## Install
 
 ```sh
-kubectl apply -f deploy/daemonset.yaml
-kubectl apply -f deploy/claims.yaml
-kubectl get resourceslices -l ''   # one pool per node
+kubectl apply -f deploy/daemonset.yaml -f deploy/deviceclasses.yaml -f deploy/claims.yaml
 ```
 
-Requires Kubernetes ≥ 1.34 (`resource.k8s.io/v1`) with DRA enabled on the kubelet.
+Requires Kubernetes 1.34 or later (`resource.k8s.io/v1`) with DRA enabled on the kubelet. The
+DaemonSet runs as root and privileged on every node: the plugin socket and CDI directory are
+root-owned on the host. If a node's containerd uses a different `cdi_spec_dirs`, set
+`--cdi-root` and the DaemonSet's CDI mount to match.
 
-## Duplicate serials
+The Docker build does not run tests. Run `task test` locally or in CI.
 
-RTL-SDR sticks ship with the factory serial `00000001`. Two un-reprogrammed dongles on
-one host are ambiguous — a pinned claim cannot tell them apart. The driver logs an
-error naming the serial; fix it with `rtl_eeprom -s <new-serial>` and **physically
-replug** (the EEPROM is only re-read at power-up; re-enumeration alone is not enough).
+## Upgrading from rtlsdr-dra
 
-## Status
+Applying the new manifests does not remove the old driver's objects. Delete them by hand:
 
-Verified end-to-end on a kind cluster running Kubernetes v1.34.0, against a synthetic
-sysfs tree mirroring a real node and `mknod`-ed USB device nodes:
+- the `rtlsdr-dra` DaemonSet, ServiceAccount, ClusterRole and ClusterRoleBinding;
+- the `sdr.jacaudi.dev` ResourceSlices;
+- the old DeviceClass `rtl-sdr.jacaudi.dev`;
+- `/var/lib/kubelet/plugins/sdr.jacaudi.dev` on each node.
 
-| Behaviour | Result |
-|---|---|
-| Publishes a ResourceSlice with the serial as an attribute | 2 devices, correct serials |
-| Unpinned claim draws any free radio | got `rtlsdr-35650102` |
-| CEL selector pins one specific stick | got `rtlsdr-37728719`, as selected |
-| CDI injects only that dongle's node | `189,4` and `189,132` respectively, one per container |
-| `RTLSDR_SERIAL` / `RTLSDR_DEVNODE` injected | present in both containers |
-| Pool exhaustion | 3rd pod stayed Pending: "cannot allocate all claims" |
-| Release on pod deletion | freed radio was reallocated to the waiting pod; CDI spec removed |
-
-Unit tests (27) cover discovery, attribute publishing, CDI spec generation, and the
-prepare/unprepare paths including re-enumeration and unplug.
-
-Not yet exercised: real RTL-SDR hardware (the dongles were simulated via sysfs and
-`mknod`), and multi-node scheduling.
+Claims written against `sdr.jacaudi.dev` attributes or the old class must be rewritten for the
+`usb.jacaudi.dev` attributes and the `rtl-sdr.usb.jacaudi.dev` class.
