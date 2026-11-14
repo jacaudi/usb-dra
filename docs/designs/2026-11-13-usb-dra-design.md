@@ -50,7 +50,9 @@ device with stable identity attributes, let `DeviceClass` CEL selectors say what
 
 ## Constraints
 
-- Kubernetes ≥ 1.34, `resource.k8s.io/v1`. Cluster runs v1.35.10. `k8s.io/*` stays v0.34.x.
+- Kubernetes ≥ 1.34, `resource.k8s.io/v1`. Cluster runs v1.35.10. `k8s.io/*` stays v0.34.3.
+- Go toolchain go1.26.11, `golang.org/x/net` v0.60.0, `google.golang.org/grpc` v1.83.2 (govulncheck clean; user request 2026-11-14). `k8s.io/*` is not bumped with them.
+- `.markdownlint-cli2.yaml` disables MD013 (line length) repo-wide.
 - API server validation of a ResourceSlice (release-1.35 `pkg/apis/resource/validation`):
   device names are DNS-1123 labels (≤ 63) and unique within the slice; at most 128 devices
   per slice; string attribute values ≤ 64 bytes; ≤ 32 attributes per device; attribute IDs
@@ -93,6 +95,8 @@ no tty, device node captured at publish time.
 | Image | `ghcr.io/jacaudi/rtlsdr-dra:v0.1.0` | `ghcr.io/jacaudi/usb-dra:latest` (CI publishes `latest` from `main`; no release stage exists. The home-ops deploy follow-up pins by digest.) |
 | Example DeviceClasses | `rtl-sdr.jacaudi.dev` | `rtl-sdr.usb.jacaudi.dev`, `rak4631.usb.jacaudi.dev` |
 
+An "Upgrading from rtlsdr-dra" section in the README covers removing the old objects.
+
 The GitHub repository rename (user decision 2026-11-13, option b) is done by the unattended
 run with `gh repo rename usb-dra --repo jacaudi/rtlsdr-dra --yes`, at the start of the
 planning phase, before the feature worktree is created, followed by
@@ -104,7 +108,12 @@ directory `~/Projects/github/rtlsdr-dra` keeps its name; renaming it is left to 
 
 Walk `sys/bus/usb/devices` (relative, read through `fs.FS`). Failing to read that directory
 is the only error that fails a scan. Every other read error affects one device only: the
-device is skipped for this scan and logged, and the scan continues.
+device is skipped for this scan and logged, and the scan continues. Severe skips (a name
+collision, a port over 64 bytes), duplicate serials and the dropped-device count log at
+error; other skips log at `V(2)`, which the DaemonSet runs (`-v=2`).
+
+Files: `internal/usb/sysfs.go`; the exclusion and include filter is `internal/usb/filter.go`;
+flag parsing is `cmd/usb-dra-kubeletplugin/main.go`.
 
 For each entry whose name has no `:` (interface dirs have one) and that has `idVendor`,
 `idProduct`, `busnum`, `devnum`:
@@ -162,6 +171,8 @@ Worked example, talos-05-wrk today:
 
 A SuperSpeed device that falls back to high speed changes revision and therefore port.
 
+Files: `internal/usb/sysfs.go`.
+
 ### Identity and device names
 
 Every device gets a candidate name from its identity, then names are made unique.
@@ -194,6 +205,8 @@ Behavior to accept and document:
   matching either device. An already prepared claim keeps its spec until its next prepare,
   which fails with "no longer attached".
 
+Files: `internal/usb/identity.go` and `internal/usb/usb.go`.
+
 ### Attributes (driver-qualified, `device.attributes["usb.jacaudi.dev"].<key>`)
 
 | Key | Type | When | Bound | Example |
@@ -214,6 +227,8 @@ CDC-Ethernet NICs, not only ttys.
 
 Never published: device node, bus number, devnum, tty names, tty aliases.
 
+Files: `internal/usb/slice.go`.
+
 ### CEL selector rules (shipped manifests and README must follow them)
 
 `a` below is shorthand for `device.attributes["usb.jacaudi.dev"]`; manifests and the README
@@ -233,6 +248,8 @@ a port-identity device that kept a duplicate `serial`, and a device of another d
 Every evaluation must succeed without error and match exactly the expected devices; the
 pinned-by-serial selector must not match the duplicate.
 
+Files: `deploy/*.yaml` and `internal/usb/selectors_test.go`.
+
 ### Prepared state (checkpoint)
 
 Follows the practice of the reference driver (`kubernetes-sigs/dra-example-driver`) and the
@@ -245,8 +262,8 @@ it holds as prepared (`pkg/kubelet/cm/dra/manager.go:362-364`, release-1.35).
 - **File**: `checkpoint.json` in the plugin data directory
   (`/var/lib/kubelet/plugins/usb.jacaudi.dev/`, already a hostPath).
 - **Content**: `{"version": 1, "claims": {"<uid>": {"namespace": "…", "name": "…",
-  "devices": [{"device": "<device name>", "request": "<result.Request>"}]}}}`, devices in
-  allocation-result order.
+  "devices": [{"device": "<device name>", "request": "<result.Request>",
+  "port": "<port at prepare>"}]}}}`, devices in allocation-result order.
 - **Writes**: atomic, the reference driver's way: `os.CreateTemp` in the same directory,
   write, `Sync`, `Rename` over the file. Written after the claim's CDI spec on Prepare, and
   after the spec is removed on Unprepare.
@@ -261,22 +278,26 @@ it holds as prepared (`pkg/kubelet/cm/dra/manager.go:362-364`, release-1.35).
   read → resolve → write. The rescan ticker only publishes; it never touches prepared
   state.
 
+Files: `cmd/usb-dra-kubeletplugin/checkpoint.go`.
+
 ### Prepare
 
 For each claim:
 
-1. Reject any allocation result for this driver with `AdminAccess` set: two processes
-   sharing a USB device or tty corrupt each other.
-2. **Overlap check** ("the last line of defense against using the same device for two
+1. Reject any allocation result for this driver with `AdminAccess` set (two processes
+   sharing a USB device or tty corrupt each other) or from a pool other than this node's.
+2. Resolve every allocated device from one fresh scan, never from the checkpoint or
+   publish-time state. A device not found fails the claim with "no longer attached". This
+   comes first because the overlap check needs each device's current port (ledger ruling B7).
+3. **Overlap check** ("the last line of defense against using the same device for two
    different unrelated workloads", `draplugin.go:79-80`): if any allocated device is
-   recorded in the checkpoint for a different claim UID, fail with an error naming both
-   claims and the device.
-3. Resolve each allocated device by name from a fresh scan, never from the checkpoint or
-   publish-time state. A device not found fails the claim with "no longer attached".
-4. Write the claim's CDI spec (below), whether or not the claim UID is already in the
-   checkpoint. Re-preparing a known claim therefore picks up new node paths, and rebuilds the
-   spec after a reboot wipes `/var/run/cdi` (tmpfs) while kubelet's checkpoint survives
-   (kubernetes#141433; the reference driver does the same, PR #259).
+   recorded in the checkpoint for a different claim UID, by device name or by last recorded
+   port, fail with an error naming both claims and the device. A recorded port does not
+   count when the holder's recorded device is attached on a different port now.
+4. Assign the tty aliases and write the claim's CDI spec (below), whether or not the claim
+   UID is already in the checkpoint. Re-preparing a known claim therefore picks up new node
+   paths, and rebuilds the spec after a reboot wipes `/var/run/cdi` (tmpfs) while kubelet's
+   checkpoint survives (kubernetes#141433; the reference driver does the same, PR #259).
 5. Record the claim in the checkpoint and return the CDI IDs. CDI device names are scoped
    by claim UID and stay identical across re-prepares.
 
@@ -293,8 +314,8 @@ The claim's CDI spec contains, per resolved device:
   above. A RAK4631 claimed by request `lora` appears at `/dev/dra/lora/tty0`.
 
 Every device node is written with host path and container path (the alias's host path is
-the real `/dev/<name>`), and with no major, minor, UID, GID or file mode: the runtime fills
-those from the host node and the container process.
+the real `/dev/<name>`) and `Permissions: "rw"`, and with no major, minor, UID, GID or file
+mode: the runtime fills those from the host node and the container process.
 
 Env, per device: `USB_DEVNODE`; `USB_SERIAL` (serial identity only); `USB_TTY` (host path
 of the device's first tty, when it has one). Kubernetes `$(VAR)` expansion does not see CDI
@@ -306,11 +327,15 @@ autoloads by modalias (`80-drivers.rules`; not exercised with real hardware). A 
 no bound tty is injected with its USB node only; prepare does not fail, and the README says
 how to load the module through Talos machine config if autoload fails.
 
+Files: `cmd/usb-dra-kubeletplugin/driver.go` and `cmd/usb-dra-kubeletplugin/cdi.go`.
+
 ### Unprepare
 
 Remove the claim's CDI spec by claim UID, then its checkpoint entry, whether or not the
 claim is known (`RemoveSpec` tolerates a missing file, CDI `cache.go:332-335`). Unknown
 claims return success.
+
+Files: `cmd/usb-dra-kubeletplugin/driver.go` and `cmd/usb-dra-kubeletplugin/cdi.go`.
 
 ### Known limitations (documented in the README)
 
@@ -323,6 +348,8 @@ claims return success.
 - **Container restarts reuse the prepared spec.** kubelet does not re-prepare for a container
   restart, so a restarted container gets the paths resolved at the last prepare.
 - **Port-identity swaps** (see Identity).
+- **Moved while claimed**: a port-identity device moved to another port while claimed is a
+  new device to the driver and can be prepared for a second claim.
 - **tty alias collisions**: two claims in one container that reuse a request name collide on
   `/dev/dra/<request>/`; the runtime applies the last one without error. Use distinct
   request names.
@@ -357,8 +384,8 @@ claims return success.
 10. Shipped selectors guard `device.driver` and optional attributes.
 11. Prepared state survives a driver restart (checkpoint written atomically, loaded before
     registration).
-12. A device prepared for one claim is never prepared for another; admin-access results are
-    rejected.
+12. A device prepared for one claim is never prepared for another, by device name or last
+    recorded port; admin-access results are rejected.
 
 Also update `.claude/CLAUDE.md`'s pin rule: `k8s.io/*` stays v0.34.x while the cluster runs
 1.35; bumping is a separate change.
