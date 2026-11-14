@@ -110,8 +110,7 @@ func (c checkpoint) clone() checkpoint {
 	return c
 }
 
-// holder returns the lexically smallest claim UID other than except that holds a device
-// with this name or, when port is non-empty, this port.
+// holder returns the smallest claim UID, other than except, holding this device name or (non-empty) port.
 func (c checkpoint) holder(device, port, except string) (uid string, ok bool) {
 	for id, cl := range c.Claims {
 		if id == except || (ok && id >= uid) {
