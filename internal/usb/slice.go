@@ -1,62 +1,47 @@
 package usb
 
 import (
+	"strings"
+
 	resourceapi "k8s.io/api/resource/v1"
 	"k8s.io/dynamic-resource-allocation/resourceslice"
 )
 
-// DriverName is the DRA driver name. Attributes published without a domain prefix
-// are implicitly qualified by it, so a claim selects on:
-//
-//	device.attributes["usb.jacaudi.dev"].serial == "35650102"
+// DriverName is the DRA driver name; attributes published without a domain are implicitly qualified by it.
 const DriverName = "usb.jacaudi.dev"
 
-// Attributes describes the dongle to CEL selectors in a ResourceClaim.
-//
-// Only stable identity is published. The device node is deliberately excluded: bus
-// and device numbers change on every re-enumeration, so a claim written against them
-// would silently select the wrong radio after a replug.
+// Attributes describes the device to CEL selectors; the device node, bus number and tty names are never published because they change on re-enumeration.
 func (d Device) Attributes() map[resourceapi.QualifiedName]resourceapi.DeviceAttribute {
 	attrs := map[resourceapi.QualifiedName]resourceapi.DeviceAttribute{
-		"serial":  {StringValue: new(d.Serial)},
-		"vendor":  {StringValue: new(d.Vendor)},
-		"product": {StringValue: new(d.Product)},
+		"vendor":   {StringValue: new(d.Vendor)},
+		"product":  {StringValue: new(d.Product)},
+		"identity": {StringValue: new(string(d.Identity))},
+		"port":     {StringValue: new(d.Port)},
 	}
-	if d.Manufacturer != "" {
-		attrs["manufacturer"] = resourceapi.DeviceAttribute{StringValue: new(d.Manufacturer)}
+	optional := func(key resourceapi.QualifiedName, value string) {
+		if value != "" {
+			attrs[key] = resourceapi.DeviceAttribute{StringValue: new(value)}
+		}
 	}
-	if d.ProductName != "" {
-		attrs["productName"] = resourceapi.DeviceAttribute{StringValue: new(d.ProductName)}
+	optional("serial", d.Serial)
+	optional("manufacturer", d.Manufacturer)
+	optional("productName", d.ProductName)
+	if classes := strings.Join(d.InterfaceClasses(), ","); len(classes) <= resourceapi.DeviceAttributeMaxValueLength {
+		optional("interfaceClasses", classes)
 	}
 	return attrs
 }
 
-// ResourceSliceDevices converts discovered dongles into published DRA devices.
-func ResourceSliceDevices(devices []Device) []resourceapi.Device {
-	out := make([]resourceapi.Device, 0, len(devices))
-	for _, d := range devices {
-		out = append(out, resourceapi.Device{
-			Name:       d.DeviceName(),
-			Attributes: d.Attributes(),
-		})
+// NodeResources builds this node's pool, always with one slice even when empty so "no devices" differs from "no driver", and returns how many devices the slice cap dropped.
+func NodeResources(nodeName string, devices []Device) (resourceslice.DriverResources, int) {
+	kept := devices[:min(len(devices), resourceapi.ResourceSliceMaxDevices)]
+	published := make([]resourceapi.Device, len(kept))
+	for i, d := range kept {
+		published[i] = resourceapi.Device{Name: d.Name, Attributes: d.Attributes()}
 	}
-	return out
-}
-
-// NodeResources builds the per-node pool this driver publishes.
-//
-// One pool per node, named after the node, because a USB dongle is only reachable
-// from the machine it is plugged into. An empty slice is still published when no
-// dongle is present: "pool with no devices" tells the scheduler the driver is
-// healthy and simply has nothing, which is different from "no pool at all".
-func NodeResources(nodeName string, devices []Device) resourceslice.DriverResources {
 	return resourceslice.DriverResources{
 		Pools: map[string]resourceslice.Pool{
-			nodeName: {
-				Slices: []resourceslice.Slice{{
-					Devices: ResourceSliceDevices(devices),
-				}},
-			},
+			nodeName: {Slices: []resourceslice.Slice{{Devices: published}}},
 		},
-	}
+	}, len(devices) - len(kept)
 }

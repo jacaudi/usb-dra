@@ -26,6 +26,7 @@ type config struct {
 	registrarDir string
 	pluginDir    string
 	sysfs        fs.FS
+	filter       usb.Filter
 	rescan       time.Duration
 }
 
@@ -56,6 +57,11 @@ func run() error {
 		*pluginDir = filepath.Join("/var/lib/kubelet/plugins", *driverName)
 	}
 
+	excludeClasses, err := usb.ParseExcludeClasses(usb.DefaultExcludeClasses)
+	if err != nil {
+		return err
+	}
+
 	cfg := config{
 		driverName:   *driverName,
 		nodeName:     *nodeName,
@@ -63,6 +69,7 @@ func run() error {
 		registrarDir: *registrarDir,
 		pluginDir:    *pluginDir,
 		sysfs:        os.DirFS(*sysfsRoot),
+		filter:       usb.Filter{ExcludeClasses: excludeClasses},
 		rescan:       *rescan,
 	}
 

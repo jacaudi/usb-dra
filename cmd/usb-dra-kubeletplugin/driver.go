@@ -17,10 +17,10 @@ import (
 	"github.com/jacaudi/usb-dra/internal/usb"
 )
 
-// preparedDevice is one dongle mapped into one claim.
+// preparedDevice is one USB device mapped into one claim.
 type preparedDevice struct {
-	DeviceName string   // ResourceSlice device name, e.g. rtlsdr-35650102
-	Serial     string   // EEPROM serial
+	DeviceName string   // ResourceSlice device name, e.g. usb-0bda-2838-35650102
+	Serial     string   // serial of a serial-identity device, "" for a port-identity one
 	DevNode    string   // resolved at prepare time, not cached from publish
 	Requests   []string // claim request names this device satisfies
 }
@@ -30,6 +30,7 @@ type driver struct {
 	helper     *kubeletplugin.Helper
 	cdi        *cdiHandler
 	sysfs      fs.FS
+	filter     usb.Filter
 	nodeName   string
 	driverName string
 
@@ -47,6 +48,7 @@ func newDriver(ctx context.Context, cfg config, client coreclientset.Interface) 
 		client:     client,
 		cdi:        cdi,
 		sysfs:      cfg.sysfs,
+		filter:     cfg.filter,
 		nodeName:   cfg.nodeName,
 		driverName: cfg.driverName,
 		prepared:   make(map[types.UID][]preparedDevice),
@@ -72,19 +74,29 @@ func newDriver(ctx context.Context, cfg config, client coreclientset.Interface) 
 func (d *driver) publish(ctx context.Context) error {
 	logger := klog.FromContext(ctx)
 
-	devices, duplicates, err := usb.Discover(d.sysfs)
+	scan, err := usb.Discover(d.sysfs, d.filter)
 	if err != nil {
-		return fmt.Errorf("discover dongles: %w", err)
+		return fmt.Errorf("discover usb devices: %w", err)
 	}
-	for _, serial := range duplicates {
-		// Two sticks answering the same serial make a pinned claim ambiguous, and
-		// rtl_tcp -d <serial> would pick arbitrarily. Loud, but not fatal.
-		logger.Error(nil, "Duplicate RTL-SDR serial; reprogram one with rtl_eeprom -s",
-			"serial", serial)
+	for _, serial := range scan.DuplicateSerials {
+		// Devices sharing a serial fall back to port identity, so a claim pinned by that serial matches none of them.
+		logger.Error(nil, "Duplicate USB serial; the devices are named by port until the serials differ", "serial", serial)
+	}
+	for _, skip := range scan.Skipped {
+		if skip.Severe {
+			logger.Error(nil, "Skipping USB device", "dir", skip.Dir, "reason", skip.Reason)
+		} else {
+			logger.V(2).Info("Skipping USB device", "dir", skip.Dir, "reason", skip.Reason)
+		}
 	}
 
-	logger.V(2).Info("Publishing dongles", "count", len(devices), "node", d.nodeName)
-	return d.helper.PublishResources(ctx, usb.NodeResources(d.nodeName, devices))
+	resources, dropped := usb.NodeResources(d.nodeName, scan.Devices)
+	if dropped > 0 {
+		logger.Error(nil, "Too many USB devices for one ResourceSlice; the rest are not published", "dropped", dropped)
+	}
+
+	logger.V(2).Info("Publishing USB devices", "count", len(scan.Devices)-dropped, "node", d.nodeName)
+	return d.helper.PublishResources(ctx, resources)
 }
 
 func (d *driver) Shutdown() {
@@ -122,21 +134,23 @@ func (d *driver) prepareOne(ctx context.Context, claim *resourceapi.ResourceClai
 			continue
 		}
 
-		// Resolve the node fresh from the serial rather than trusting a path
-		// captured at publish time; the dongle may have re-enumerated since.
-		dev, err := d.lookup(res.Device)
+		// Resolve the node fresh by name rather than trusting a path captured at publish time; the device may have re-enumerated since.
+		dev, err := usb.FindByName(d.sysfs, d.filter, res.Device)
 		if err != nil {
 			return kubeletplugin.PrepareResult{
 				Err: fmt.Errorf("claim %s: %w", claim.UID, err),
 			}
 		}
 
-		devices = append(devices, preparedDevice{
+		prepared := preparedDevice{
 			DeviceName: res.Device,
-			Serial:     dev.Serial,
 			DevNode:    dev.DevNode(),
 			Requests:   []string{res.Request},
-		})
+		}
+		if dev.Identity == usb.IdentitySerial {
+			prepared.Serial = dev.Serial
+		}
+		devices = append(devices, prepared)
 	}
 
 	if len(devices) == 0 {
@@ -155,20 +169,6 @@ func (d *driver) prepareOne(ctx context.Context, claim *resourceapi.ResourceClai
 
 	logger.Info("Prepared claim", "uid", claim.UID, "devices", len(devices))
 	return kubeletplugin.PrepareResult{Devices: d.toKubeletDevices(claim, devices)}
-}
-
-// lookup maps a published device name back to the dongle currently attached.
-func (d *driver) lookup(deviceName string) (usb.Device, error) {
-	all, _, err := usb.Discover(d.sysfs)
-	if err != nil {
-		return usb.Device{}, fmt.Errorf("discover dongles: %w", err)
-	}
-	for _, dev := range all {
-		if dev.DeviceName() == deviceName {
-			return dev, nil
-		}
-	}
-	return usb.Device{}, fmt.Errorf("device %q is no longer attached", deviceName)
 }
 
 func (d *driver) toKubeletDevices(claim *resourceapi.ResourceClaim, devices []preparedDevice) []kubeletplugin.Device {

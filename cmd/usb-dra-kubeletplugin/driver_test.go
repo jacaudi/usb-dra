@@ -15,18 +15,26 @@ import (
 	"github.com/jacaudi/usb-dra/internal/usb"
 )
 
-// sysfsWith builds a fake sysfs containing the given dongles.
+// sysfsWith builds a fake sysfs containing the given dongles, each with one vendor-class interface and a root hub for its bus.
 func sysfsWith(devs ...[5]string) fstest.MapFS {
 	fsys := fstest.MapFS{}
+	put := func(rel, content string) {
+		fsys[usb.SysfsUSBDir+"/"+rel] = &fstest.MapFile{Data: []byte(content)}
+	}
 	for _, d := range devs {
 		dir, vendor, product, serial, busdev := d[0], d[1], d[2], d[3], d[4]
 		bus, dev, _ := strings.Cut(busdev, "/")
-		base := usb.SysfsUSBDir + "/" + dir
-		fsys[base+"/idVendor"] = &fstest.MapFile{Data: []byte(vendor)}
-		fsys[base+"/idProduct"] = &fstest.MapFile{Data: []byte(product)}
-		fsys[base+"/serial"] = &fstest.MapFile{Data: []byte(serial)}
-		fsys[base+"/busnum"] = &fstest.MapFile{Data: []byte(bus)}
-		fsys[base+"/devnum"] = &fstest.MapFile{Data: []byte(dev)}
+		put(dir+"/idVendor", vendor)
+		put(dir+"/idProduct", product)
+		put(dir+"/serial", serial)
+		put(dir+"/busnum", bus)
+		put(dir+"/devnum", dev)
+		put(dir+"/bDeviceClass", "00")
+		put(dir+":1.0/bInterfaceClass", "ff")
+		put(dir+":1.0/bInterfaceNumber", "00")
+		put("usb"+bus+"/serial", "0000:00:14.0")
+		put("usb"+bus+"/speed", "480")
+		put("usb"+bus+"/bDeviceClass", "09")
 	}
 	return fsys
 }
@@ -70,7 +78,7 @@ func allocResult(device string) resourceapi.DeviceRequestAllocationResult {
 func TestPrepareMapsDeviceNode(t *testing.T) {
 	d, _ := newTestDriver(t, sysfsWith([5]string{"1-1.4", "0bda", "2838", "35650102", "1/5"}))
 
-	res := d.prepareOne(context.Background(), claimFor("uid-1", allocResult("rtlsdr-35650102")))
+	res := d.prepareOne(context.Background(), claimFor("uid-1", allocResult("usb-0bda-2838-35650102")))
 	if res.Err != nil {
 		t.Fatalf("prepare failed: %v", res.Err)
 	}
@@ -79,7 +87,7 @@ func TestPrepareMapsDeviceNode(t *testing.T) {
 	}
 
 	got := res.Devices[0]
-	if got.DeviceName != "rtlsdr-35650102" {
+	if got.DeviceName != "usb-0bda-2838-35650102" {
 		t.Errorf("DeviceName = %q", got.DeviceName)
 	}
 	if got.PoolName != "talos-01-cp" {
@@ -88,7 +96,7 @@ func TestPrepareMapsDeviceNode(t *testing.T) {
 	if len(got.Requests) != 1 || got.Requests[0] != "radio" {
 		t.Errorf("Requests = %v, want [radio]", got.Requests)
 	}
-	want := "k8s.usb.jacaudi.dev/usb=uid-1-rtlsdr-35650102"
+	want := "k8s.usb.jacaudi.dev/usb=uid-1-usb-0bda-2838-35650102"
 	if len(got.CDIDeviceIDs) != 1 || got.CDIDeviceIDs[0] != want {
 		t.Errorf("CDIDeviceIDs = %v, want [%s]", got.CDIDeviceIDs, want)
 	}
@@ -101,7 +109,7 @@ func TestPrepareResolvesNodeAfterReenumeration(t *testing.T) {
 	// Published as bus 1 dev 5; by prepare time it has moved to bus 3 dev 11.
 	d, _ := newTestDriver(t, sysfsWith([5]string{"3-1.1", "0bda", "2838", "35650102", "3/11"}))
 
-	res := d.prepareOne(context.Background(), claimFor("uid-1", allocResult("rtlsdr-35650102")))
+	res := d.prepareOne(context.Background(), claimFor("uid-1", allocResult("usb-0bda-2838-35650102")))
 	if res.Err != nil {
 		t.Fatalf("prepare failed: %v", res.Err)
 	}
@@ -119,7 +127,7 @@ func TestPrepareResolvesNodeAfterReenumeration(t *testing.T) {
 
 func TestPrepareIsIdempotent(t *testing.T) {
 	d, dir := newTestDriver(t, sysfsWith([5]string{"1-1.4", "0bda", "2838", "35650102", "1/5"}))
-	claim := claimFor("uid-1", allocResult("rtlsdr-35650102"))
+	claim := claimFor("uid-1", allocResult("usb-0bda-2838-35650102"))
 
 	first := d.prepareOne(context.Background(), claim)
 	if first.Err != nil {
@@ -143,7 +151,7 @@ func TestPrepareFailsWhenDongleUnplugged(t *testing.T) {
 	// Allocated by the scheduler, but physically gone before the pod started.
 	d, dir := newTestDriver(t, sysfsWith([5]string{"1-1.4", "0bda", "2838", "37728719", "1/5"}))
 
-	res := d.prepareOne(context.Background(), claimFor("uid-1", allocResult("rtlsdr-35650102")))
+	res := d.prepareOne(context.Background(), claimFor("uid-1", allocResult("usb-0bda-2838-35650102")))
 	if res.Err == nil {
 		t.Fatal("want an error when the allocated dongle is absent, got nil")
 	}
@@ -162,13 +170,13 @@ func TestPrepareIgnoresOtherDrivers(t *testing.T) {
 
 	foreign := allocResult("gpu-0")
 	foreign.Driver = "gpu.intel.com"
-	claim := claimFor("uid-1", foreign, allocResult("rtlsdr-35650102"))
+	claim := claimFor("uid-1", foreign, allocResult("usb-0bda-2838-35650102"))
 
 	res := d.prepareOne(context.Background(), claim)
 	if res.Err != nil {
 		t.Fatalf("prepare failed: %v", res.Err)
 	}
-	if len(res.Devices) != 1 || res.Devices[0].DeviceName != "rtlsdr-35650102" {
+	if len(res.Devices) != 1 || res.Devices[0].DeviceName != "usb-0bda-2838-35650102" {
 		t.Errorf("must prepare only this driver's devices, got %v", res.Devices)
 	}
 }
@@ -198,7 +206,7 @@ func TestPrepareRejectsClaimWithNoDevicesForUs(t *testing.T) {
 func TestUnprepareRemovesSpecAndIsIdempotent(t *testing.T) {
 	d, dir := newTestDriver(t, sysfsWith([5]string{"1-1.4", "0bda", "2838", "35650102", "1/5"}))
 
-	if res := d.prepareOne(context.Background(), claimFor("uid-1", allocResult("rtlsdr-35650102"))); res.Err != nil {
+	if res := d.prepareOne(context.Background(), claimFor("uid-1", allocResult("usb-0bda-2838-35650102"))); res.Err != nil {
 		t.Fatalf("prepare: %v", res.Err)
 	}
 
