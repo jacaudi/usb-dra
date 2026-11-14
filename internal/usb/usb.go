@@ -37,11 +37,7 @@ type Device struct {
 	Bus, Dev     int
 }
 
-// DevNode returns the character device libusb opens for this device.
-//
-// It is deliberately not published as a ResourceSlice attribute: the bus and device
-// numbers change every time the device re-enumerates, so prepare resolves it fresh
-// by name.
+// DevNode returns the character device libusb opens; it is never published as an attribute because bus and device numbers change on re-enumeration.
 func (d Device) DevNode() string {
 	return fmt.Sprintf("/dev/bus/usb/%03d/%03d", d.Bus, d.Dev)
 }

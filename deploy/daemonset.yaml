@@ -71,10 +71,7 @@ spec:
     spec:
       serviceAccountName: usb-dra
       priorityClassName: system-node-critical
-      # Runs on every node on purpose. A node with no dongles publishes an EMPTY
-      # pool, which tells the scheduler "driver healthy, no radios" — different
-      # from "no pool", and it avoids leaving a stale slice behind when the last
-      # dongle is unplugged.
+      # Runs on every node on purpose: a node with no USB devices publishes an empty pool, meaning the driver is healthy, and no stale slice outlives the last device.
       tolerations:
         - operator: Exists
       containers:

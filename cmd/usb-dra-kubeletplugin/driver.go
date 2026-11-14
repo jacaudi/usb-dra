@@ -100,7 +100,6 @@ func (d *driver) publish(ctx context.Context) error {
 		return fmt.Errorf("discover usb devices: %w", err)
 	}
 	for _, serial := range scan.DuplicateSerials {
-		// Devices sharing a serial fall back to port identity, so a claim pinned by that serial matches none of them.
 		logger.Error(nil, "Duplicate USB serial; the devices are named by port until the serials differ", "serial", serial)
 	}
 	for _, skip := range scan.Skipped {
@@ -144,13 +143,11 @@ func (d *driver) prepareOne(ctx context.Context, claim *resourceapi.ResourceClai
 		return kubeletplugin.PrepareResult{Err: fmt.Errorf("claim %s: %w", uid, err)}
 	}
 
-	// The spec is rewritten even for a known claim: re-prepare picks up new nodes and rebuilds a spec a reboot wiped.
 	assignAliases(devices)
 	if err := d.cdi.writeClaimSpec(uid, devices); err != nil {
 		return kubeletplugin.PrepareResult{Err: fmt.Errorf("claim %s: %w", uid, err)}
 	}
 
-	// A failed save keeps the old state; the spec stays and unprepare removes it.
 	next := d.state.with(uid, checkpointEntry(claim, devices))
 	if err := next.save(d.checkpointPath); err != nil {
 		return kubeletplugin.PrepareResult{Err: fmt.Errorf("claim %s: %w", uid, err)}
@@ -161,7 +158,7 @@ func (d *driver) prepareOne(ctx context.Context, claim *resourceapi.ResourceClai
 	return kubeletplugin.PrepareResult{Devices: d.toKubeletDevices(claim, devices)}
 }
 
-// resolveClaim maps the claim's allocation for this driver to the devices attached now and refuses any another claim holds.
+// resolveClaim maps the claim's allocation for this driver to the devices attached now and refuses any that another claim holds.
 func (d *driver) resolveClaim(claim *resourceapi.ResourceClaim) ([]preparedDevice, error) {
 	if claim.Status.Allocation == nil {
 		return nil, errors.New("not allocated")
@@ -258,7 +255,6 @@ func (d *driver) unprepareOne(ctx context.Context, claim kubeletplugin.Namespace
 		return fmt.Errorf("remove CDI spec for claim %s: %w", uid, err)
 	}
 
-	// An unknown claim has no entry; unprepare is idempotent and still succeeds.
 	if _, known := d.state.Claims[uid]; known {
 		next := d.state.without(uid)
 		if err := next.save(d.checkpointPath); err != nil {
