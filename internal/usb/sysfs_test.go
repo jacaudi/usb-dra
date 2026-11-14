@@ -3,6 +3,7 @@ package usb
 import (
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -125,6 +126,15 @@ func TestScanSkipsVhciSilently(t *testing.T) {
 	withFile(fsys, "17-1/bDeviceClass", "00")
 	withFile(fsys, "17-1:1.0/bInterfaceClass", "ff")
 	withFile(fsys, "17-1:1.0/bInterfaceNumber", "00")
+	// A vhci device without interface directories, and one whose interface is unreadable, are dropped silently too.
+	for i, dir := range []string{"17-2", "17-3"} {
+		withFile(fsys, dir+"/idVendor", "abcd")
+		withFile(fsys, dir+"/idProduct", "0001")
+		withFile(fsys, dir+"/busnum", "17")
+		withFile(fsys, dir+"/devnum", strconv.Itoa(3+i))
+		withFile(fsys, dir+"/bDeviceClass", "00")
+	}
+	withFile(fsys, "17-3:1.0/bInterfaceNumber", "00")
 
 	cands, skips, err := scan(fsys, defaultFilter)
 	if err != nil {
@@ -133,8 +143,10 @@ func TestScanSkipsVhciSilently(t *testing.T) {
 	if len(skips) != 0 {
 		t.Errorf("skips = %+v, want none", skips)
 	}
-	if slices.Contains(candDirs(cands), "17-1") {
-		t.Errorf("vhci device 17-1 published: %v", candDirs(cands))
+	for _, dir := range []string{"17-1", "17-2", "17-3"} {
+		if slices.Contains(candDirs(cands), dir) {
+			t.Errorf("vhci device %s published: %v", dir, candDirs(cands))
+		}
 	}
 }
 
