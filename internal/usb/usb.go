@@ -1,5 +1,5 @@
-// Package rtlsdr discovers RTL-SDR dongles from sysfs and models them as DRA devices.
-package rtlsdr
+// Package usb discovers USB devices from sysfs and models them as DRA devices.
+package usb
 
 import (
 	"bytes"

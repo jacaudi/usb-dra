@@ -1,9 +1,4 @@
-// Command rtlsdr-dra-kubeletplugin publishes locally-attached RTL-SDR dongles as
-// DRA devices and maps them into containers via CDI.
-//
-// Each dongle becomes one device in this node's pool, carrying its EEPROM serial as
-// a selectable attribute. A claim with no selector draws any free radio; a claim
-// with a CEL selector on the serial pins one specific stick.
+// Command usb-dra-kubeletplugin publishes local USB devices as DRA devices and maps them into containers via CDI.
 package main
 
 import (
@@ -21,7 +16,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
 
-	"github.com/jacaudi/rtlsdr-dra/internal/rtlsdr"
+	"github.com/jacaudi/usb-dra/internal/usb"
 )
 
 type config struct {
@@ -43,7 +38,7 @@ func main() {
 
 func run() error {
 	var (
-		driverName   = flag.String("driver-name", rtlsdr.DriverName, "DRA driver name")
+		driverName   = flag.String("driver-name", usb.DriverName, "DRA driver name")
 		nodeName     = flag.String("node-name", os.Getenv("NODE_NAME"), "name of the node this instance runs on")
 		cdiRoot      = flag.String("cdi-root", "/var/run/cdi", "directory for generated CDI specs")
 		registrarDir = flag.String("kubelet-registrar-dir", "/var/lib/kubelet/plugins_registry", "kubelet plugin registrar directory")

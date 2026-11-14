@@ -14,7 +14,7 @@ import (
 	"k8s.io/dynamic-resource-allocation/kubeletplugin"
 	"k8s.io/klog/v2"
 
-	"github.com/jacaudi/rtlsdr-dra/internal/rtlsdr"
+	"github.com/jacaudi/usb-dra/internal/usb"
 )
 
 // preparedDevice is one dongle mapped into one claim.
@@ -72,7 +72,7 @@ func newDriver(ctx context.Context, cfg config, client coreclientset.Interface) 
 func (d *driver) publish(ctx context.Context) error {
 	logger := klog.FromContext(ctx)
 
-	devices, duplicates, err := rtlsdr.Discover(d.sysfs)
+	devices, duplicates, err := usb.Discover(d.sysfs)
 	if err != nil {
 		return fmt.Errorf("discover dongles: %w", err)
 	}
@@ -84,7 +84,7 @@ func (d *driver) publish(ctx context.Context) error {
 	}
 
 	logger.V(2).Info("Publishing dongles", "count", len(devices), "node", d.nodeName)
-	return d.helper.PublishResources(ctx, rtlsdr.NodeResources(d.nodeName, devices))
+	return d.helper.PublishResources(ctx, usb.NodeResources(d.nodeName, devices))
 }
 
 func (d *driver) Shutdown() {
@@ -158,17 +158,17 @@ func (d *driver) prepareOne(ctx context.Context, claim *resourceapi.ResourceClai
 }
 
 // lookup maps a published device name back to the dongle currently attached.
-func (d *driver) lookup(deviceName string) (rtlsdr.Device, error) {
-	all, _, err := rtlsdr.Discover(d.sysfs)
+func (d *driver) lookup(deviceName string) (usb.Device, error) {
+	all, _, err := usb.Discover(d.sysfs)
 	if err != nil {
-		return rtlsdr.Device{}, fmt.Errorf("discover dongles: %w", err)
+		return usb.Device{}, fmt.Errorf("discover dongles: %w", err)
 	}
 	for _, dev := range all {
 		if dev.DeviceName() == deviceName {
 			return dev, nil
 		}
 	}
-	return rtlsdr.Device{}, fmt.Errorf("device %q is no longer attached", deviceName)
+	return usb.Device{}, fmt.Errorf("device %q is no longer attached", deviceName)
 }
 
 func (d *driver) toKubeletDevices(claim *resourceapi.ResourceClaim, devices []preparedDevice) []kubeletplugin.Device {

@@ -1,13 +1,13 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: rtlsdr-dra
+  name: usb-dra
   namespace: kube-system
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: rtlsdr-dra
+  name: usb-dra
 rules:
   # The resourceslice controller publishes and prunes this node's pool.
   - apiGroups:
@@ -45,31 +45,31 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: rtlsdr-dra
+  name: usb-dra
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: rtlsdr-dra
+  name: usb-dra
 subjects:
   - kind: ServiceAccount
-    name: rtlsdr-dra
+    name: usb-dra
     namespace: kube-system
 ---
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: rtlsdr-dra
+  name: usb-dra
   namespace: kube-system
 spec:
   selector:
     matchLabels:
-      app.kubernetes.io/name: rtlsdr-dra
+      app.kubernetes.io/name: usb-dra
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: rtlsdr-dra
+        app.kubernetes.io/name: usb-dra
     spec:
-      serviceAccountName: rtlsdr-dra
+      serviceAccountName: usb-dra
       priorityClassName: system-node-critical
       # Runs on every node on purpose. A node with no dongles publishes an EMPTY
       # pool, which tells the scheduler "driver healthy, no radios" — different
@@ -79,9 +79,9 @@ spec:
         - operator: Exists
       containers:
         - name: plugin
-          image: ghcr.io/jacaudi/rtlsdr-dra:v0.1.0
+          image: ghcr.io/jacaudi/usb-dra:latest
           args:
-            - --driver-name=sdr.jacaudi.dev
+            - --driver-name=usb.jacaudi.dev
             - --rescan-interval=30s
             - -v=2
           env:

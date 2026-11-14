@@ -10,7 +10,7 @@ ARG TARGETOS=linux
 ARG TARGETARCH=amd64
 RUN go test ./... \
  && CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
-    go build -trimpath -ldflags="-s -w" -o /rtlsdr-dra-kubeletplugin ./cmd/rtlsdr-dra-kubeletplugin
+    go build -trimpath -ldflags="-s -w" -o /usb-dra-kubeletplugin ./cmd/usb-dra-kubeletplugin
 
 # The plugin is a static binary that only talks to sysfs, the kubelet sockets and
 # the API server, so it needs nothing from userspace.
@@ -21,5 +21,5 @@ RUN go test ./... \
 # startup with "mkdir ...: permission denied".
 FROM gcr.io/distroless/static-debian12:latest@sha256:a9fcaedd4c9b59e12dd65d954f0b5044f19b0647a8a3712e77205df9e7b102cd
 
-COPY --from=build /rtlsdr-dra-kubeletplugin /usr/bin/rtlsdr-dra-kubeletplugin
-ENTRYPOINT ["/usr/bin/rtlsdr-dra-kubeletplugin"]
+COPY --from=build /usb-dra-kubeletplugin /usr/bin/usb-dra-kubeletplugin
+ENTRYPOINT ["/usr/bin/usb-dra-kubeletplugin"]
