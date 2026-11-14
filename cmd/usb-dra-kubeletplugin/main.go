@@ -146,8 +146,7 @@ func run() error {
 	}
 	logger.Info("Driver started", "driver", cfg.driverName, "node", cfg.nodeName)
 
-	// Re-scan on a timer so a hotplugged dongle appears without a restart. sysfs
-	// offers no portable watch for USB add/remove that works from a container.
+	// Re-scan on a timer so a hotplugged device appears; sysfs has no portable USB add/remove watch from a container.
 	ticker := time.NewTicker(cfg.rescan)
 	defer ticker.Stop()
 	for {

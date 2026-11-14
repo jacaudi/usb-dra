@@ -12,9 +12,7 @@ import (
 // cdiClass groups every device this driver injects.
 const cdiClass = "usb"
 
-// cdiHandler writes the CDI specs that map a dongle's character device into the
-// container. The kubelet passes the qualified CDI names to the runtime, which
-// applies these edits when the container is created.
+// cdiHandler writes the CDI specs that map a USB device's nodes into the container; the kubelet hands the qualified names to the runtime.
 type cdiHandler struct {
 	cache  *cdiapi.Cache
 	vendor string
@@ -28,9 +26,7 @@ func newCDIHandler(specDir, driverName string) (*cdiHandler, error) {
 	return &cdiHandler{cache: cache, vendor: "k8s." + driverName}, nil
 }
 
-// writeClaimSpec emits one transient CDI spec describing every dongle allocated to
-// a claim. Major/minor numbers are intentionally omitted: the CDI runtime fills them
-// in by stat-ing the host path, which keeps this correct across re-enumeration.
+// writeClaimSpec emits one transient CDI spec for every device allocated to a claim; major and minor stay unset so the runtime reads them from the host path.
 func (c *cdiHandler) writeClaimSpec(claimUID string, devices []preparedDevice) error {
 	spec := &cdispec.Spec{
 		Kind:    c.kind(),
@@ -106,8 +102,7 @@ func (c *cdiHandler) specName(claimUID string) string {
 	return cdiapi.GenerateTransientSpecName(c.vendor, cdiClass, claimUID)
 }
 
-// cdiDeviceName scopes a device to its claim so two claims holding different radios
-// never collide in the shared CDI namespace.
+// cdiDeviceName scopes a device to its claim so two claims never collide in the shared CDI namespace.
 func cdiDeviceName(claimUID, deviceName string) string {
 	return claimUID + "-" + deviceName
 }
