@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"fmt"
 	"io/fs"
-	"math"
 	"path"
 	"slices"
 	"strconv"
@@ -167,20 +166,20 @@ func readInterface(fsys fs.FS, dir string) (Interface, bool) {
 	if err != nil {
 		return Interface{}, false
 	}
-	return Interface{Number: num, Class: fmt.Sprintf("%02x", class), TTYs: readTTYs(fsys, dir)}, true
+	return Interface{Number: int(num), Class: fmt.Sprintf("%02x", class), TTYs: readTTYs(fsys, dir)}, true
 }
 
 // readHexAttr parses a sysfs attribute printed as one or two hex digits.
-func readHexAttr(fsys fs.FS, dir, name string) (int, error) {
+func readHexAttr(fsys fs.FS, dir, name string) (uint8, error) {
 	s, err := readAttr(fsys, dir, name)
 	if err != nil {
 		return 0, err
 	}
 	v, err := strconv.ParseUint(s, 16, 8)
-	if err != nil || v > math.MaxUint8 {
+	if err != nil {
 		return 0, fmt.Errorf("parse %s %q: want one byte in hex", name, s)
 	}
-	return int(v), nil
+	return uint8(v), nil
 }
 
 // readTTYs lists the ttys of an interface: <dir>/tty/<name> (cdc_acm) and <dir>/ttyUSB<n> (usb-serial); an unreadable directory has none.

@@ -191,3 +191,10 @@ func TestInvalidUTF8SerialIsPortIdentity(t *testing.T) {
 	d := discoverRAK(t, func(fsys fstest.MapFS) { withFile(fsys, "5-1/serial", "\xff\xfe") })
 	assertPortIdentity(t, d, "usb-239a-8029-p-pnp0d10-02-v2-1")
 }
+
+func TestControlCharSerialIsPortIdentity(t *testing.T) {
+	for _, serial := range []string{"AB\x07CD", "AB\x1bCD", "AB\x7fCD"} {
+		d := discoverRAK(t, func(fsys fstest.MapFS) { withFile(fsys, "5-1/serial", serial) })
+		assertPortIdentity(t, d, "usb-239a-8029-p-pnp0d10-02-v2-1")
+	}
+}

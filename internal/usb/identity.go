@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"slices"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	resourceapi "k8s.io/api/resource/v1"
@@ -14,8 +15,8 @@ const reasonNameCollision = "name collision"
 
 const (
 	maxNameLen  = 63 // DNS-1123 label limit
-	keptNameLen = 54 // maxNameLen minus "-" and the 8-digit hash
 	hashLen     = 8
+	keptNameLen = maxNameLen - 1 - hashLen // the rest of a truncated name is "-" and the hash
 )
 
 // deviceName builds the ResourceSlice name usb-<vendor>-<product>-<id>, reduced to a DNS label; a name over 63 characters keeps its first 54 and ends in a hash of the whole.
@@ -30,9 +31,9 @@ func deviceName(vendor, product, id string) string {
 	return name[:keptNameLen] + "-" + hex.EncodeToString(sum[:])[:hashLen]
 }
 
-// usableSerial returns raw when it can identify a device (non-empty, valid UTF-8, short enough, not all zeros), else "".
+// usableSerial returns raw when it can identify a device (non-empty, valid UTF-8, short enough, no control characters, not all zeros), else "".
 func usableSerial(raw string) string {
-	if raw == "" || len(raw) > resourceapi.DeviceAttributeMaxValueLength || !utf8.ValidString(raw) || strings.Trim(raw, "0") == "" {
+	if raw == "" || len(raw) > resourceapi.DeviceAttributeMaxValueLength || !utf8.ValidString(raw) || strings.ContainsFunc(raw, unicode.IsControl) || strings.Trim(raw, "0") == "" {
 		return ""
 	}
 	return raw
