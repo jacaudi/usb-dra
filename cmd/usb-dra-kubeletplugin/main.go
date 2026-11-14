@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io/fs"
@@ -37,40 +38,75 @@ func main() {
 	}
 }
 
-func run() error {
+// parseFlags reads and validates the command line; klog's flags are registered on the same set.
+func parseFlags(args []string) (config, error) {
+	flags := flag.NewFlagSet("usb-dra-kubeletplugin", flag.ContinueOnError)
 	var (
-		driverName   = flag.String("driver-name", usb.DriverName, "DRA driver name")
-		nodeName     = flag.String("node-name", os.Getenv("NODE_NAME"), "name of the node this instance runs on")
-		cdiRoot      = flag.String("cdi-root", "/var/run/cdi", "directory for generated CDI specs")
-		registrarDir = flag.String("kubelet-registrar-dir", "/var/lib/kubelet/plugins_registry", "kubelet plugin registrar directory")
-		pluginDir    = flag.String("kubelet-plugin-dir", "", "kubelet plugin data directory (default /var/lib/kubelet/plugins/<driver-name>)")
-		sysfsRoot    = flag.String("sysfs-root", "/", "filesystem root to read sysfs from")
-		rescan       = flag.Duration("rescan-interval", 30*time.Second, "how often to re-scan for hotplugged dongles")
+		driverName     = flags.String("driver-name", usb.DriverName, "DRA driver name")
+		nodeName       = flags.String("node-name", os.Getenv("NODE_NAME"), "name of the node this instance runs on")
+		cdiRoot        = flags.String("cdi-root", "/var/run/cdi", "directory for generated CDI specs")
+		registrarDir   = flags.String("kubelet-registrar-dir", "/var/lib/kubelet/plugins_registry", "kubelet plugin registrar directory")
+		pluginDir      = flags.String("kubelet-plugin-dir", "", "kubelet plugin data directory (default /var/lib/kubelet/plugins/<driver-name>)")
+		sysfsRoot      = flags.String("sysfs-root", "/", "filesystem root to read sysfs from")
+		rescan         = flags.Duration("rescan-interval", 30*time.Second, "how often to re-scan for hotplugged devices")
+		excludeClasses = flags.String("exclude-classes", usb.DefaultExcludeClasses, "comma-separated interface classes (two lowercase hex digits) whose devices are not published")
+		includes       []string
 	)
-	klog.InitFlags(nil)
-	flag.Parse()
+	flags.Func("include", "vid:pid or vid:pid:serial of a device to publish despite --exclude-classes; repeatable", func(s string) error {
+		includes = append(includes, s)
+		return nil
+	})
+	klog.InitFlags(flags)
+	if err := flags.Parse(args); err != nil {
+		return config{}, err
+	}
 
+	filter, err := parseFilter(*excludeClasses, includes)
+	if err != nil {
+		return config{}, err
+	}
 	if *nodeName == "" {
-		return fmt.Errorf("--node-name is required (or set NODE_NAME); it names this node's device pool")
+		return config{}, errors.New("--node-name is required (or set NODE_NAME); it names this node's device pool")
 	}
 	if *pluginDir == "" {
 		*pluginDir = filepath.Join("/var/lib/kubelet/plugins", *driverName)
 	}
 
-	excludeClasses, err := usb.ParseExcludeClasses(usb.DefaultExcludeClasses)
-	if err != nil {
-		return err
-	}
-
-	cfg := config{
+	return config{
 		driverName:   *driverName,
 		nodeName:     *nodeName,
 		cdiRoot:      *cdiRoot,
 		registrarDir: *registrarDir,
 		pluginDir:    *pluginDir,
 		sysfs:        os.DirFS(*sysfsRoot),
-		filter:       usb.Filter{ExcludeClasses: excludeClasses},
+		filter:       filter,
 		rescan:       *rescan,
+	}, nil
+}
+
+func parseFilter(excludeClasses string, includes []string) (usb.Filter, error) {
+	exclude, err := usb.ParseExcludeClasses(excludeClasses)
+	if err != nil {
+		return usb.Filter{}, fmt.Errorf("--exclude-classes: %w", err)
+	}
+	filter := usb.Filter{ExcludeClasses: exclude}
+	for _, s := range includes {
+		inc, err := usb.ParseInclude(s)
+		if err != nil {
+			return usb.Filter{}, fmt.Errorf("--include: %w", err)
+		}
+		filter.Includes = append(filter.Includes, inc)
+	}
+	return filter, nil
+}
+
+func run() error {
+	cfg, err := parseFlags(os.Args[1:])
+	if errors.Is(err, flag.ErrHelp) {
+		return nil
+	}
+	if err != nil {
+		return err
 	}
 
 	// Fail loudly rather than silently publishing an empty pool.

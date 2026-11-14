@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"path/filepath"
 	"sync"
 
 	resourceapi "k8s.io/api/resource/v1"
@@ -20,8 +21,11 @@ import (
 // preparedDevice is one USB device mapped into one claim.
 type preparedDevice struct {
 	DeviceName string   // ResourceSlice device name, e.g. usb-0bda-2838-35650102
-	Serial     string   // serial of a serial-identity device, "" for a port-identity one
 	DevNode    string   // resolved at prepare time, not cached from publish
+	Serial     string   // serial of a serial-identity device, "" for a port-identity one
+	Port       string   // controller and port chain, recorded so a renamed device on the same port is still caught
+	TTYs       []string // host tty paths, interface order then tty order
+	Aliases    []string // Aliases[i] is the container path for TTYs[i]
 	Requests   []string // claim request names this device satisfies
 }
 
@@ -34,25 +38,42 @@ type driver struct {
 	nodeName   string
 	driverName string
 
-	mu       sync.Mutex
-	prepared map[types.UID][]preparedDevice
+	checkpointPath string
+
+	mu    sync.Mutex
+	state checkpoint
 }
 
-func newDriver(ctx context.Context, cfg config, client coreclientset.Interface) (*driver, error) {
+// newDriverCore builds everything except the kubelet registration: the CDI handler and the loaded checkpoint.
+func newDriverCore(cfg config) (*driver, error) {
 	cdi, err := newCDIHandler(cfg.cdiRoot, cfg.driverName)
 	if err != nil {
 		return nil, err
 	}
 
-	d := &driver{
-		client:     client,
-		cdi:        cdi,
-		sysfs:      cfg.sysfs,
-		filter:     cfg.filter,
-		nodeName:   cfg.nodeName,
-		driverName: cfg.driverName,
-		prepared:   make(map[types.UID][]preparedDevice),
+	path := filepath.Join(cfg.pluginDir, checkpointFile)
+	state, err := loadCheckpoint(path)
+	if err != nil {
+		return nil, err
 	}
+
+	return &driver{
+		cdi:            cdi,
+		sysfs:          cfg.sysfs,
+		filter:         cfg.filter,
+		nodeName:       cfg.nodeName,
+		driverName:     cfg.driverName,
+		checkpointPath: path,
+		state:          state,
+	}, nil
+}
+
+func newDriver(ctx context.Context, cfg config, client coreclientset.Interface) (*driver, error) {
+	d, err := newDriverCore(cfg)
+	if err != nil {
+		return nil, err
+	}
+	d.client = client
 
 	helper, err := kubeletplugin.Start(ctx, d,
 		kubeletplugin.KubeClient(client),
@@ -114,37 +135,64 @@ func (d *driver) PrepareResourceClaims(ctx context.Context, claims []*resourceap
 }
 
 func (d *driver) prepareOne(ctx context.Context, claim *resourceapi.ResourceClaim) kubeletplugin.PrepareResult {
-	logger := klog.FromContext(ctx)
-
 	d.mu.Lock()
-	existing, ok := d.prepared[claim.UID]
-	d.mu.Unlock()
-	if ok {
-		// Prepare is idempotent: the kubelet may retry after a restart.
-		return kubeletplugin.PrepareResult{Devices: d.toKubeletDevices(claim, existing)}
+	defer d.mu.Unlock()
+
+	uid := string(claim.UID)
+	devices, err := d.resolveClaim(claim)
+	if err != nil {
+		return kubeletplugin.PrepareResult{Err: fmt.Errorf("claim %s: %w", uid, err)}
 	}
 
+	// The spec is rewritten even for a known claim: re-prepare picks up new nodes and rebuilds a spec a reboot wiped.
+	assignAliases(devices)
+	if err := d.cdi.writeClaimSpec(uid, devices); err != nil {
+		return kubeletplugin.PrepareResult{Err: fmt.Errorf("claim %s: %w", uid, err)}
+	}
+
+	// A failed save keeps the old state; the spec stays and unprepare removes it.
+	next := d.state.with(uid, checkpointEntry(claim, devices))
+	if err := next.save(d.checkpointPath); err != nil {
+		return kubeletplugin.PrepareResult{Err: fmt.Errorf("claim %s: %w", uid, err)}
+	}
+	d.state = next
+
+	klog.FromContext(ctx).Info("Prepared claim", "uid", uid, "devices", len(devices))
+	return kubeletplugin.PrepareResult{Devices: d.toKubeletDevices(claim, devices)}
+}
+
+// resolveClaim maps the claim's allocation for this driver to the devices attached now and refuses any another claim holds.
+func (d *driver) resolveClaim(claim *resourceapi.ResourceClaim) ([]preparedDevice, error) {
 	if claim.Status.Allocation == nil {
-		return kubeletplugin.PrepareResult{Err: fmt.Errorf("claim %s is not allocated", claim.UID)}
+		return nil, errors.New("not allocated")
 	}
 
-	var devices []preparedDevice
+	var results []resourceapi.DeviceRequestAllocationResult
 	for _, res := range claim.Status.Allocation.Devices.Results {
 		if res.Driver != d.driverName {
 			continue
 		}
+		if res.AdminAccess != nil && *res.AdminAccess {
+			return nil, errors.New("admin access is not supported")
+		}
+		results = append(results, res)
+	}
+	if len(results) == 0 {
+		return nil, fmt.Errorf("allocated no %s devices", d.driverName)
+	}
 
-		// Resolve the node fresh by name rather than trusting a path captured at publish time; the device may have re-enumerated since.
+	// Resolve by name from a fresh scan, never from a path captured at publish time; the device may have re-enumerated since.
+	devices := make([]preparedDevice, 0, len(results))
+	for _, res := range results {
 		dev, err := usb.FindByName(d.sysfs, d.filter, res.Device)
 		if err != nil {
-			return kubeletplugin.PrepareResult{
-				Err: fmt.Errorf("claim %s: %w", claim.UID, err),
-			}
+			return nil, err
 		}
-
 		prepared := preparedDevice{
 			DeviceName: res.Device,
 			DevNode:    dev.DevNode(),
+			Port:       dev.Port,
+			TTYs:       dev.TTYs(),
 			Requests:   []string{res.Request},
 		}
 		if dev.Identity == usb.IdentitySerial {
@@ -153,22 +201,21 @@ func (d *driver) prepareOne(ctx context.Context, claim *resourceapi.ResourceClai
 		devices = append(devices, prepared)
 	}
 
-	if len(devices) == 0 {
-		return kubeletplugin.PrepareResult{
-			Err: fmt.Errorf("claim %s allocated no %s devices", claim.UID, d.driverName),
+	for _, dev := range devices {
+		if other, held := d.state.holder(dev.DeviceName, dev.Port, string(claim.UID)); held {
+			return nil, fmt.Errorf("device %s (port %s) is held by claim %s, not available to claim %s", dev.DeviceName, dev.Port, other, claim.UID)
 		}
 	}
+	return devices, nil
+}
 
-	if err := d.cdi.writeClaimSpec(string(claim.UID), devices); err != nil {
-		return kubeletplugin.PrepareResult{Err: fmt.Errorf("claim %s: %w", claim.UID, err)}
+// checkpointEntry records the claim's devices in allocation-result order.
+func checkpointEntry(claim *resourceapi.ResourceClaim, devices []preparedDevice) checkpointClaim {
+	entry := checkpointClaim{Namespace: claim.Namespace, Name: claim.Name}
+	for _, dev := range devices {
+		entry.Devices = append(entry.Devices, checkpointDevice{Device: dev.DeviceName, Request: dev.Requests[0], Port: dev.Port})
 	}
-
-	d.mu.Lock()
-	d.prepared[claim.UID] = devices
-	d.mu.Unlock()
-
-	logger.Info("Prepared claim", "uid", claim.UID, "devices", len(devices))
-	return kubeletplugin.PrepareResult{Devices: d.toKubeletDevices(claim, devices)}
+	return entry
 }
 
 func (d *driver) toKubeletDevices(claim *resourceapi.ResourceClaim, devices []preparedDevice) []kubeletplugin.Device {
@@ -194,22 +241,23 @@ func (d *driver) UnprepareResourceClaims(ctx context.Context, claims []kubeletpl
 
 func (d *driver) unprepareOne(ctx context.Context, claim kubeletplugin.NamespacedObject) error {
 	d.mu.Lock()
-	_, ok := d.prepared[claim.UID]
-	d.mu.Unlock()
-	if !ok {
-		// Already released, or never prepared here. Unprepare must be idempotent.
-		return nil
+	defer d.mu.Unlock()
+
+	uid := string(claim.UID)
+	if err := d.cdi.deleteClaimSpec(uid); err != nil {
+		return fmt.Errorf("remove CDI spec for claim %s: %w", uid, err)
 	}
 
-	if err := d.cdi.deleteClaimSpec(string(claim.UID)); err != nil {
-		return fmt.Errorf("remove CDI spec for claim %s: %w", claim.UID, err)
+	// An unknown claim has no entry; unprepare is idempotent and still succeeds.
+	if _, known := d.state.Claims[uid]; known {
+		next := d.state.without(uid)
+		if err := next.save(d.checkpointPath); err != nil {
+			return fmt.Errorf("claim %s: %w", uid, err)
+		}
+		d.state = next
 	}
 
-	d.mu.Lock()
-	delete(d.prepared, claim.UID)
-	d.mu.Unlock()
-
-	klog.FromContext(ctx).Info("Unprepared claim", "uid", claim.UID)
+	klog.FromContext(ctx).Info("Unprepared claim", "uid", uid)
 	return nil
 }
 

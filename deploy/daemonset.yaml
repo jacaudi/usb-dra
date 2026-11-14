@@ -83,6 +83,7 @@ spec:
           args:
             - --driver-name=usb.jacaudi.dev
             - --rescan-interval=30s
+            - --exclude-classes=03,08,e0
             - -v=2
           env:
             - name: NODE_NAME
