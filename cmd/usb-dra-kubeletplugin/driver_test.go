@@ -482,3 +482,18 @@ func TestPrepareScansOncePerClaim(t *testing.T) {
 		t.Errorf("sysfs scans = %d, want 1 per claim", counting.scans)
 	}
 }
+
+func TestPrepareAfterPortSwap(t *testing.T) {
+	fsys := loadFixture(t, "talos-05-wrk")
+	d, _ := newTestDriver(t, fsys)
+	const otherRTL = "usb-0bda-2838-35650102"
+	prepareOK(t, d, "uid-a", allocResult(rtlName))
+	prepareOK(t, d, "uid-b", allocResult(otherRTL))
+
+	// Swapping the sticks between their ports moves each serial to the other's port.
+	withFile(fsys, "9-1/serial", "35650102")
+	withFile(fsys, "11-1/serial", "93610062")
+
+	prepareOK(t, d, "uid-a", allocResult(rtlName))
+	prepareOK(t, d, "uid-b", allocResult(otherRTL))
+}

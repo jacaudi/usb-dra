@@ -170,34 +170,38 @@ func TestCheckpointHolder(t *testing.T) {
 		except       string
 		wantUID      string
 		wantOK       bool
+		attached     map[string]string
 	}{
-		{"same device name", c, testCheckpointDevice, "", "uid-z", "uid-a", true},
-		{"same port, other name", c, "other-name", testCheckpointPort, "uid-z", "uid-a", true},
-		{"holder is the excepted claim", c, testCheckpointDevice, "", "uid-a", "", false},
-		{"no match", c, "x", "y", "", "", false},
-		{"empty port matches no device", c.with("uid-b", checkpointClaim{Devices: []checkpointDevice{{Device: "n"}}}), "x", "", "", "", false},
+		{"same device name", c, testCheckpointDevice, "", "uid-z", "uid-a", true, nil},
+		{"same port, other name", c, "other-name", testCheckpointPort, "uid-z", "uid-a", true, nil},
+		{"holder is the excepted claim", c, testCheckpointDevice, "", "uid-a", "", false, nil},
+		{"no match", c, "x", "y", "", "", false, nil},
+		{"holder moved to another port", c, "other-name", testCheckpointPort, "uid-z", "", false, map[string]string{testCheckpointDevice: "PNP0D10:09-v2-1"}},
+		{"holder still on its recorded port", c, "other-name", testCheckpointPort, "uid-z", "uid-a", true, map[string]string{testCheckpointDevice: testCheckpointPort}},
+		{"moved holder still holds its device name", c, testCheckpointDevice, "", "uid-z", "uid-a", true, map[string]string{testCheckpointDevice: "PNP0D10:09-v2-1"}},
+		{"empty port matches no device", c.with("uid-b", checkpointClaim{Devices: []checkpointDevice{{Device: "n"}}}), "x", "", "", "", false, nil},
 		{
 			"two holders: device name from uid-a, port from uid-0",
 			c.with("uid-0", checkpointClaim{Devices: []checkpointDevice{{Device: "p", Port: "P"}}}).
 				with("uid-a", checkpointClaim{Devices: []checkpointDevice{{Device: "N", Port: "q"}}}),
-			"N", "P", "uid-a", "uid-0", true,
+			"N", "P", "uid-a", "uid-0", true, nil,
 		},
 		{
 			"two holders: lexically smallest uid wins",
 			c.with("uid-0", checkpointClaim{Devices: []checkpointDevice{{Device: "p", Port: "P"}}}).
 				with("uid-a", checkpointClaim{Devices: []checkpointDevice{{Device: "N", Port: "q"}}}),
-			"N", "P", "uid-z", "uid-0", true,
+			"N", "P", "uid-z", "uid-0", true, nil,
 		},
 		{
 			"two holders, other side",
 			c.with("uid-0", checkpointClaim{Devices: []checkpointDevice{{Device: "p", Port: "P"}}}).
 				with("uid-a", checkpointClaim{Devices: []checkpointDevice{{Device: "N", Port: "q"}}}),
-			"N", "P", "uid-0", "uid-a", true,
+			"N", "P", "uid-0", "uid-a", true, nil,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotUID, gotOK := tt.c.holder(tt.device, tt.port, tt.except)
+			gotUID, gotOK := tt.c.holder(tt.device, tt.port, tt.except, tt.attached)
 			if gotUID != tt.wantUID || gotOK != tt.wantOK {
 				t.Fatalf("holder(%q, %q, %q) = (%q, %v), want (%q, %v)",
 					tt.device, tt.port, tt.except, gotUID, gotOK, tt.wantUID, tt.wantOK)
