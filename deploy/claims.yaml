@@ -1,15 +1,4 @@
-# Every device this driver publishes.
-apiVersion: resource.k8s.io/v1
-kind: DeviceClass
-metadata:
-  name: rtl-sdr.jacaudi.dev
-spec:
-  selectors:
-    - cel:
-        expression: device.driver == "sdr.jacaudi.dev"
----
-# Any free radio. This is the default: the scheduler picks a dongle and places the
-# pod on whichever node holds it. One claim per pod => one pod per SDR.
+# Example claim templates: any RTL-SDR, one RTL-SDR pinned by its unique serial, and the RAK4631 pinned by USB port.
 apiVersion: resource.k8s.io/v1
 kind: ResourceClaimTemplate
 metadata:
@@ -21,11 +10,10 @@ spec:
       requests:
         - name: radio
           exactly:
-            deviceClassName: rtl-sdr.jacaudi.dev
+            deviceClassName: rtl-sdr.usb.jacaudi.dev
             allocationMode: ExactCount
             count: 1
 ---
-# One specific stick, selected by its EEPROM serial. Same class, one extra selector.
 apiVersion: resource.k8s.io/v1
 kind: ResourceClaimTemplate
 metadata:
@@ -37,9 +25,29 @@ spec:
       requests:
         - name: radio
           exactly:
-            deviceClassName: rtl-sdr.jacaudi.dev
+            deviceClassName: rtl-sdr.usb.jacaudi.dev
             allocationMode: ExactCount
             count: 1
             selectors:
               - cel:
-                  expression: device.attributes["sdr.jacaudi.dev"].serial == "35650102"
+                  expression: >-
+                    device.attributes["usb.jacaudi.dev"].identity == "serial" &&
+                    device.attributes["usb.jacaudi.dev"].serial == "35650102"
+---
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata:
+  name: rak4631-lora-port
+  namespace: selfhosted
+spec:
+  spec:
+    devices:
+      requests:
+        - name: lora
+          exactly:
+            deviceClassName: rak4631.usb.jacaudi.dev
+            allocationMode: ExactCount
+            count: 1
+            selectors:
+              - cel:
+                  expression: device.attributes["usb.jacaudi.dev"].port == "PNP0D10:02-v2-1"
