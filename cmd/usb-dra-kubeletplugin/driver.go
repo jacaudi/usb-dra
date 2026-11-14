@@ -181,12 +181,20 @@ func (d *driver) resolveClaim(claim *resourceapi.ResourceClaim) ([]preparedDevic
 		return nil, fmt.Errorf("allocated no %s devices", d.driverName)
 	}
 
-	// Resolve by name from a fresh scan, never from a path captured at publish time; the device may have re-enumerated since.
+	scan, err := usb.Discover(d.sysfs, d.filter)
+	if err != nil {
+		return nil, fmt.Errorf("discover usb devices: %w", err)
+	}
+	attached := make(map[string]usb.Device, len(scan.Devices))
+	for _, dev := range scan.Devices {
+		attached[dev.Name] = dev
+	}
+
 	devices := make([]preparedDevice, 0, len(results))
 	for _, res := range results {
-		dev, err := usb.FindByName(d.sysfs, d.filter, res.Device)
-		if err != nil {
-			return nil, err
+		dev, ok := attached[res.Device]
+		if !ok {
+			return nil, fmt.Errorf("device %q is no longer attached", res.Device)
 		}
 		prepared := preparedDevice{
 			DeviceName: res.Device,

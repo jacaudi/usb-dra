@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -449,5 +450,35 @@ func TestUnprepareUnknownClaimRemovesSpec(t *testing.T) {
 	}
 	if entries, _ := os.ReadDir(cdiRoot); len(entries) != 0 {
 		t.Errorf("spec of an unknown claim survived unprepare: %v", entries)
+	}
+}
+
+// scanCountingFS counts how many times the USB device directory is listed.
+type scanCountingFS struct {
+	fstest.MapFS
+	scans int
+}
+
+func (f *scanCountingFS) ReadDir(name string) ([]fs.DirEntry, error) {
+	if name == usb.SysfsUSBDir {
+		f.scans++
+	}
+	return f.MapFS.ReadDir(name)
+}
+
+func TestPrepareScansOncePerClaim(t *testing.T) {
+	fsys := loadFixture(t, "talos-05-wrk")
+	d, _ := newTestDriver(t, fsys)
+	counting := &scanCountingFS{MapFS: fsys}
+	d.sysfs = counting
+
+	prepareOK(t, d, "uid-a",
+		allocResultFor("lora", rakName),
+		allocResultFor("radio", rtlName),
+		allocResultFor("spare", "usb-0bda-2838-35650102"),
+	)
+
+	if counting.scans != 1 {
+		t.Errorf("sysfs scans = %d, want 1 per claim", counting.scans)
 	}
 }
