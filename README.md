@@ -92,9 +92,9 @@ wrong device after a replug.
 ## Selecting devices
 
 An **unpinned** claim draws any free device of its DeviceClass. A **CEL selector** on the
-request pins one specific device by serial or by port. A claim holds one device per
-allocation, so one claim per pod means one pod per device; the scheduler places the pod on
-whichever node holds the allocated device.
+request pins one specific device by serial or by port. A device is allocated to at most one
+claim at a time. Use a ResourceClaimTemplate so each pod gets its own claim; the scheduler
+places the pod on the node that holds the allocated device.
 
 Two things make a CEL selector safe or not:
 
