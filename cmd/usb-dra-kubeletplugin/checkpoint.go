@@ -110,14 +110,16 @@ func (c checkpoint) clone() checkpoint {
 	return c
 }
 
-// holder returns the smallest claim UID, other than except, holding this device name or (non-empty) port.
-func (c checkpoint) holder(device, port, except string) (uid string, ok bool) {
+// holder returns the smallest claim UID, other than except, holding this device name or (non-empty) port; attached maps device names to current ports, and a holder attached on another port no longer holds its recorded one.
+func (c checkpoint) holder(device, port, except string, attached map[string]string) (uid string, ok bool) {
 	for id, cl := range c.Claims {
 		if id == except || (ok && id >= uid) {
 			continue
 		}
 		for _, d := range cl.Devices {
-			if d.Device == device || (port != "" && d.Port == port) {
+			current, found := attached[d.Device]
+			moved := found && current != d.Port
+			if d.Device == device || (port != "" && d.Port == port && !moved) {
 				uid, ok = id, true
 				break
 			}

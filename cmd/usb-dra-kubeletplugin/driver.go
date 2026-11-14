@@ -186,8 +186,10 @@ func (d *driver) resolveClaim(claim *resourceapi.ResourceClaim) ([]preparedDevic
 		return nil, fmt.Errorf("discover usb devices: %w", err)
 	}
 	attached := make(map[string]usb.Device, len(scan.Devices))
+	ports := make(map[string]string, len(scan.Devices))
 	for _, dev := range scan.Devices {
 		attached[dev.Name] = dev
+		ports[dev.Name] = dev.Port
 	}
 
 	devices := make([]preparedDevice, 0, len(results))
@@ -210,7 +212,7 @@ func (d *driver) resolveClaim(claim *resourceapi.ResourceClaim) ([]preparedDevic
 	}
 
 	for _, dev := range devices {
-		if other, held := d.state.holder(dev.DeviceName, dev.Port, string(claim.UID)); held {
+		if other, held := d.state.holder(dev.DeviceName, dev.Port, string(claim.UID), ports); held {
 			return nil, fmt.Errorf("device %s (port %s) is held by claim %s, not available to claim %s", dev.DeviceName, dev.Port, other, claim.UID)
 		}
 	}
