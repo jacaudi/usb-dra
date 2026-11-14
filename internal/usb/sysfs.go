@@ -68,7 +68,7 @@ func scan(fsys fs.FS, f Filter) ([]candidate, []Skip, error) {
 		if strings.Contains(name, ":") {
 			continue
 		}
-		c, skip, ok := inspect(fsys, f, name, names)
+		c, skip, ok := readCandidate(fsys, f, name, names)
 		switch {
 		case ok:
 			cands = append(cands, c)
@@ -79,20 +79,7 @@ func scan(fsys fs.FS, f Filter) ([]candidate, []Skip, error) {
 	return cands, skips, nil
 }
 
-// inspect reads one device directory; ok=false with a nil skip drops the device silently.
-func inspect(fsys fs.FS, f Filter, name string, names []string) (c candidate, skip *Skip, ok bool) {
-	c, skip, ok = readCandidate(fsys, f, name, names)
-	if !ok {
-		return candidate{}, skip, false
-	}
-	c.Port, skip, ok = portOf(fsys, name, c.Bus)
-	if !ok {
-		return candidate{}, skip, false
-	}
-	return c, nil, true
-}
-
-// readCandidate reads identity, interfaces and strings, and applies the hub and class filters.
+// readCandidate reads one device directory; ok=false with a nil skip drops the device silently (hub, vhci, filtered out, or a vanished identity file).
 func readCandidate(fsys fs.FS, f Filter, name string, names []string) (candidate, *Skip, bool) {
 	dir := path.Join(SysfsUSBDir, name)
 	ids := make([]string, 4)
@@ -110,6 +97,12 @@ func readCandidate(fsys fs.FS, f Filter, name string, names []string) (candidate
 		return candidate{}, &Skip{Dir: name, Reason: reasonUnreadableDevice}, false
 	}
 	if class == hubClass {
+		return candidate{}, nil, false
+	}
+
+	root := path.Join(SysfsUSBDir, "usb"+strconv.Itoa(bus))
+	controller, ctrlErr := readAttr(fsys, root, "serial")
+	if ctrlErr == nil && strings.HasPrefix(controller, "vhci_hcd") {
 		return candidate{}, nil, false
 	}
 
@@ -136,6 +129,11 @@ func readCandidate(fsys fs.FS, f Filter, name string, names []string) (candidate
 	}
 	if !f.Publish(c.Vendor, c.Product, c.RawSerial, classes) {
 		return candidate{}, nil, false
+	}
+
+	var skip *Skip
+	if c.Port, skip = portOf(fsys, name, bus, root, controller, ctrlErr); skip != nil {
+		return candidate{}, skip, false
 	}
 	return c, nil, true
 }
@@ -211,31 +209,26 @@ func ttyNumber(name string) int {
 	return n
 }
 
-// portOf builds <controller>-v<revision>-<chain> from the root hub of bus; ok=false with a nil skip drops a vhci device silently.
-func portOf(fsys fs.FS, name string, bus int) (port string, skip *Skip, ok bool) {
-	root := path.Join(SysfsUSBDir, "usb"+strconv.Itoa(bus))
-	controller, err := readAttr(fsys, root, "serial")
-	if err != nil {
-		return "", &Skip{Dir: name, Reason: reasonUnreadableRootHub}, false
-	}
-	if strings.HasPrefix(controller, "vhci_hcd") {
-		return "", nil, false
+// portOf builds <controller>-v<revision>-<chain> from the root hub's controller and speed; a non-nil skip means the device is not publishable.
+func portOf(fsys fs.FS, name string, bus int, root, controller string, ctrlErr error) (string, *Skip) {
+	if ctrlErr != nil {
+		return "", &Skip{Dir: name, Reason: reasonUnreadableRootHub}
 	}
 	speed, err := readAttr(fsys, root, "speed")
 	if err != nil {
-		return "", &Skip{Dir: name, Reason: reasonUnreadableRootHub}, false
+		return "", &Skip{Dir: name, Reason: reasonUnreadableRootHub}
 	}
 	rev, known := portRevision(speed)
 	if !known {
-		return "", &Skip{Dir: name, Reason: reasonUnknownSpeed}, false
+		return "", &Skip{Dir: name, Reason: reasonUnknownSpeed}
 	}
 	chain := strings.TrimPrefix(name, strconv.Itoa(bus)+"-")
-	port = fmt.Sprintf("%s-v%s-%s", controller, rev, chain)
+	port := fmt.Sprintf("%s-v%s-%s", controller, rev, chain)
 	if len(port) > resourceapi.DeviceAttributeMaxValueLength {
 		reason := fmt.Sprintf("port longer than %d bytes", resourceapi.DeviceAttributeMaxValueLength)
-		return "", &Skip{Dir: name, Reason: reason, Severe: true}, false
+		return "", &Skip{Dir: name, Reason: reason, Severe: true}
 	}
-	return port, nil, true
+	return port, nil
 }
 
 // portRevision maps a root hub speed in Mb/s to the USB revision digit of its port, as udev's path_id does.
