@@ -191,20 +191,3 @@ func TestInvalidUTF8SerialIsPortIdentity(t *testing.T) {
 	d := discoverRAK(t, func(fsys fstest.MapFS) { withFile(fsys, "5-1/serial", "\xff\xfe") })
 	assertPortIdentity(t, d, "usb-239a-8029-p-pnp0d10-02-v2-1")
 }
-
-func TestFindByName(t *testing.T) {
-	fsys := loadFixture(t, "talos-05-wrk")
-
-	got, err := FindByName(fsys, defaultFilter, "usb-239a-8029-fd14948954cd1f4f")
-	if err != nil {
-		t.Fatalf("FindByName: %v", err)
-	}
-	if want := "/dev/bus/usb/005/002"; got.DevNode() != want {
-		t.Errorf("DevNode = %q, want %q", got.DevNode(), want)
-	}
-
-	_, err = FindByName(fsys, defaultFilter, "usb-dead-beef-x")
-	if err == nil || !strings.Contains(err.Error(), "no longer attached") {
-		t.Errorf("err = %v, want one containing %q", err, "no longer attached")
-	}
-}

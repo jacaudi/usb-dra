@@ -84,22 +84,6 @@ func Discover(fsys fs.FS, f Filter) (Scan, error) {
 	return Scan{Devices: devices, DuplicateSerials: duplicates, Skipped: append(skips, collisions...)}, nil
 }
 
-// FindByName resolves a published device name to the device currently attached.
-// Prepare uses this rather than a cached path so a device that re-enumerated between
-// publish and prepare is still mapped to the right node.
-func FindByName(fsys fs.FS, f Filter, name string) (Device, error) {
-	s, err := Discover(fsys, f)
-	if err != nil {
-		return Device{}, err
-	}
-	for _, d := range s.Devices {
-		if d.Name == name {
-			return d, nil
-		}
-	}
-	return Device{}, fmt.Errorf("device %q is no longer attached", name)
-}
-
 func readAttr(fsys fs.FS, dir, name string) (string, error) {
 	b, err := fs.ReadFile(fsys, path.Join(dir, name))
 	if err != nil {

@@ -88,7 +88,7 @@ tests or `kubectl apply --dry-run=server`.
 - `internal/usb/filter.go` — `--exclude-classes` and `--include` parsing and the publish
   decision.
 - `internal/usb/identity.go` — serial vs port identity, device names, uniqueness.
-- `internal/usb/usb.go` — `Discover`, `FindByName` and the `Device` type.
+- `internal/usb/usb.go` — `Discover` and the `Device` type.
 - `internal/usb/slice.go` — device to ResourceSlice attributes, the 128-device cap, and the
   always-present pool.
 - `internal/usb/selectors_test.go` — compiles every selector in `deploy/` with the DRA CEL
