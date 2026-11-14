@@ -1,0 +1,273 @@
+sys/bus/usb/devices/1-0:1.0/bInterfaceClass	09
+sys/bus/usb/devices/1-0:1.0/bInterfaceNumber	00
+sys/bus/usb/devices/10-0:1.0/bInterfaceClass	09
+sys/bus/usb/devices/10-0:1.0/bInterfaceNumber	00
+sys/bus/usb/devices/11-0:1.0/bInterfaceClass	09
+sys/bus/usb/devices/11-0:1.0/bInterfaceNumber	00
+sys/bus/usb/devices/11-1/authorized	1
+sys/bus/usb/devices/11-1/bDeviceClass	00
+sys/bus/usb/devices/11-1/busnum	11
+sys/bus/usb/devices/11-1/devnum	2
+sys/bus/usb/devices/11-1/idProduct	2838
+sys/bus/usb/devices/11-1/idVendor	0bda
+sys/bus/usb/devices/11-1/manufacturer	Nooelec
+sys/bus/usb/devices/11-1/product	NESDR SMArt v5
+sys/bus/usb/devices/11-1/serial	35650102
+sys/bus/usb/devices/11-1/speed	480
+sys/bus/usb/devices/11-1:1.0/bInterfaceClass	ff
+sys/bus/usb/devices/11-1:1.0/bInterfaceNumber	00
+sys/bus/usb/devices/12-0:1.0/bInterfaceClass	09
+sys/bus/usb/devices/12-0:1.0/bInterfaceNumber	00
+sys/bus/usb/devices/13-0:1.0/bInterfaceClass	09
+sys/bus/usb/devices/13-0:1.0/bInterfaceNumber	00
+sys/bus/usb/devices/14-0:1.0/bInterfaceClass	09
+sys/bus/usb/devices/14-0:1.0/bInterfaceNumber	00
+sys/bus/usb/devices/15-0:1.0/bInterfaceClass	09
+sys/bus/usb/devices/15-0:1.0/bInterfaceNumber	00
+sys/bus/usb/devices/15-1/authorized	1
+sys/bus/usb/devices/15-1/bDeviceClass	ef
+sys/bus/usb/devices/15-1/busnum	15
+sys/bus/usb/devices/15-1/devnum	2
+sys/bus/usb/devices/15-1/idProduct	c616
+sys/bus/usb/devices/15-1/idVendor	0e8d
+sys/bus/usb/devices/15-1/manufacturer	MediaTek Inc.
+sys/bus/usb/devices/15-1/product	Wireless_Device
+sys/bus/usb/devices/15-1/serial	000000000
+sys/bus/usb/devices/15-1/speed	480
+sys/bus/usb/devices/15-1:1.0/bInterfaceClass	e0
+sys/bus/usb/devices/15-1:1.0/bInterfaceNumber	00
+sys/bus/usb/devices/15-1:1.1/bInterfaceClass	e0
+sys/bus/usb/devices/15-1:1.1/bInterfaceNumber	01
+sys/bus/usb/devices/15-1:1.2/bInterfaceClass	e0
+sys/bus/usb/devices/15-1:1.2/bInterfaceNumber	02
+sys/bus/usb/devices/16-0:1.0/bInterfaceClass	09
+sys/bus/usb/devices/16-0:1.0/bInterfaceNumber	00
+sys/bus/usb/devices/17-0:1.0/bInterfaceClass	09
+sys/bus/usb/devices/17-0:1.0/bInterfaceNumber	00
+sys/bus/usb/devices/18-0:1.0/bInterfaceClass	09
+sys/bus/usb/devices/18-0:1.0/bInterfaceNumber	00
+sys/bus/usb/devices/2-0:1.0/bInterfaceClass	09
+sys/bus/usb/devices/2-0:1.0/bInterfaceNumber	00
+sys/bus/usb/devices/3-0:1.0/bInterfaceClass	09
+sys/bus/usb/devices/3-0:1.0/bInterfaceNumber	00
+sys/bus/usb/devices/4-0:1.0/bInterfaceClass	09
+sys/bus/usb/devices/4-0:1.0/bInterfaceNumber	00
+sys/bus/usb/devices/5-0:1.0/bInterfaceClass	09
+sys/bus/usb/devices/5-0:1.0/bInterfaceNumber	00
+sys/bus/usb/devices/5-1/authorized	1
+sys/bus/usb/devices/5-1/bDeviceClass	ef
+sys/bus/usb/devices/5-1/busnum	5
+sys/bus/usb/devices/5-1/devnum	2
+sys/bus/usb/devices/5-1/idProduct	8029
+sys/bus/usb/devices/5-1/idVendor	239a
+sys/bus/usb/devices/5-1/manufacturer	RAKwireless
+sys/bus/usb/devices/5-1/product	WisCore RAK4631 Board
+sys/bus/usb/devices/5-1/serial	FD14948954CD1F4F
+sys/bus/usb/devices/5-1/speed	12
+sys/bus/usb/devices/5-1:1.0/bInterfaceClass	02
+sys/bus/usb/devices/5-1:1.0/bInterfaceNumber	00
+sys/bus/usb/devices/5-1:1.0/tty/ttyACM0/dev	166:0
+sys/bus/usb/devices/5-1:1.1/bInterfaceClass	0a
+sys/bus/usb/devices/5-1:1.1/bInterfaceNumber	01
+sys/bus/usb/devices/6-0:1.0/bInterfaceClass	09
+sys/bus/usb/devices/6-0:1.0/bInterfaceNumber	00
+sys/bus/usb/devices/7-0:1.0/bInterfaceClass	09
+sys/bus/usb/devices/7-0:1.0/bInterfaceNumber	00
+sys/bus/usb/devices/8-0:1.0/bInterfaceClass	09
+sys/bus/usb/devices/8-0:1.0/bInterfaceNumber	00
+sys/bus/usb/devices/9-0:1.0/bInterfaceClass	09
+sys/bus/usb/devices/9-0:1.0/bInterfaceNumber	00
+sys/bus/usb/devices/9-1/authorized	1
+sys/bus/usb/devices/9-1/bDeviceClass	00
+sys/bus/usb/devices/9-1/busnum	9
+sys/bus/usb/devices/9-1/devnum	2
+sys/bus/usb/devices/9-1/idProduct	2838
+sys/bus/usb/devices/9-1/idVendor	0bda
+sys/bus/usb/devices/9-1/manufacturer	Nooelec
+sys/bus/usb/devices/9-1/product	NESDR SMArt v5
+sys/bus/usb/devices/9-1/serial	93610062
+sys/bus/usb/devices/9-1/speed	480
+sys/bus/usb/devices/9-1:1.0/bInterfaceClass	ff
+sys/bus/usb/devices/9-1:1.0/bInterfaceNumber	00
+sys/bus/usb/devices/9-1:1.1/bInterfaceClass	ff
+sys/bus/usb/devices/9-1:1.1/bInterfaceNumber	01
+sys/bus/usb/devices/usb1/authorized	1
+sys/bus/usb/devices/usb1/bDeviceClass	09
+sys/bus/usb/devices/usb1/busnum	1
+sys/bus/usb/devices/usb1/devnum	1
+sys/bus/usb/devices/usb1/idProduct	0002
+sys/bus/usb/devices/usb1/idVendor	1d6b
+sys/bus/usb/devices/usb1/manufacturer	Linux 6.18.42-talos xhci-hcd
+sys/bus/usb/devices/usb1/product	xHCI Host Controller
+sys/bus/usb/devices/usb1/serial	PNP0D10:00
+sys/bus/usb/devices/usb1/speed	480
+sys/bus/usb/devices/usb10/authorized	1
+sys/bus/usb/devices/usb10/bDeviceClass	09
+sys/bus/usb/devices/usb10/busnum	10
+sys/bus/usb/devices/usb10/devnum	1
+sys/bus/usb/devices/usb10/idProduct	0003
+sys/bus/usb/devices/usb10/idVendor	1d6b
+sys/bus/usb/devices/usb10/manufacturer	Linux 6.18.42-talos xhci-hcd
+sys/bus/usb/devices/usb10/product	xHCI Host Controller
+sys/bus/usb/devices/usb10/serial	PNP0D10:04
+sys/bus/usb/devices/usb10/speed	10000
+sys/bus/usb/devices/usb11/authorized	1
+sys/bus/usb/devices/usb11/bDeviceClass	09
+sys/bus/usb/devices/usb11/busnum	11
+sys/bus/usb/devices/usb11/devnum	1
+sys/bus/usb/devices/usb11/idProduct	0002
+sys/bus/usb/devices/usb11/idVendor	1d6b
+sys/bus/usb/devices/usb11/manufacturer	Linux 6.18.42-talos xhci-hcd
+sys/bus/usb/devices/usb11/product	xHCI Host Controller
+sys/bus/usb/devices/usb11/serial	PNP0D10:05
+sys/bus/usb/devices/usb11/speed	480
+sys/bus/usb/devices/usb12/authorized	1
+sys/bus/usb/devices/usb12/bDeviceClass	09
+sys/bus/usb/devices/usb12/busnum	12
+sys/bus/usb/devices/usb12/devnum	1
+sys/bus/usb/devices/usb12/idProduct	0003
+sys/bus/usb/devices/usb12/idVendor	1d6b
+sys/bus/usb/devices/usb12/manufacturer	Linux 6.18.42-talos xhci-hcd
+sys/bus/usb/devices/usb12/product	xHCI Host Controller
+sys/bus/usb/devices/usb12/serial	PNP0D10:05
+sys/bus/usb/devices/usb12/speed	10000
+sys/bus/usb/devices/usb13/authorized	1
+sys/bus/usb/devices/usb13/bDeviceClass	09
+sys/bus/usb/devices/usb13/busnum	13
+sys/bus/usb/devices/usb13/devnum	1
+sys/bus/usb/devices/usb13/idProduct	0002
+sys/bus/usb/devices/usb13/idVendor	1d6b
+sys/bus/usb/devices/usb13/manufacturer	Linux 6.18.42-talos xhci-hcd
+sys/bus/usb/devices/usb13/product	xHCI Host Controller
+sys/bus/usb/devices/usb13/serial	PNP0D10:06
+sys/bus/usb/devices/usb13/speed	480
+sys/bus/usb/devices/usb14/authorized	1
+sys/bus/usb/devices/usb14/bDeviceClass	09
+sys/bus/usb/devices/usb14/busnum	14
+sys/bus/usb/devices/usb14/devnum	1
+sys/bus/usb/devices/usb14/idProduct	0002
+sys/bus/usb/devices/usb14/idVendor	1d6b
+sys/bus/usb/devices/usb14/manufacturer	Linux 6.18.42-talos xhci-hcd
+sys/bus/usb/devices/usb14/product	xHCI Host Controller
+sys/bus/usb/devices/usb14/serial	PNP0D10:07
+sys/bus/usb/devices/usb14/speed	480
+sys/bus/usb/devices/usb15/authorized	1
+sys/bus/usb/devices/usb15/bDeviceClass	09
+sys/bus/usb/devices/usb15/busnum	15
+sys/bus/usb/devices/usb15/devnum	1
+sys/bus/usb/devices/usb15/idProduct	0002
+sys/bus/usb/devices/usb15/idVendor	1d6b
+sys/bus/usb/devices/usb15/manufacturer	Linux 6.18.42-talos xhci-hcd
+sys/bus/usb/devices/usb15/product	xHCI Host Controller
+sys/bus/usb/devices/usb15/serial	PNP0D10:08
+sys/bus/usb/devices/usb15/speed	480
+sys/bus/usb/devices/usb16/authorized	1
+sys/bus/usb/devices/usb16/bDeviceClass	09
+sys/bus/usb/devices/usb16/busnum	16
+sys/bus/usb/devices/usb16/devnum	1
+sys/bus/usb/devices/usb16/idProduct	0002
+sys/bus/usb/devices/usb16/idVendor	1d6b
+sys/bus/usb/devices/usb16/manufacturer	Linux 6.18.42-talos xhci-hcd
+sys/bus/usb/devices/usb16/product	xHCI Host Controller
+sys/bus/usb/devices/usb16/serial	PNP0D10:09
+sys/bus/usb/devices/usb16/speed	480
+sys/bus/usb/devices/usb17/authorized	1
+sys/bus/usb/devices/usb17/bDeviceClass	09
+sys/bus/usb/devices/usb17/busnum	17
+sys/bus/usb/devices/usb17/devnum	1
+sys/bus/usb/devices/usb17/idProduct	0002
+sys/bus/usb/devices/usb17/idVendor	1d6b
+sys/bus/usb/devices/usb17/manufacturer	Linux 6.18.42-talos vhci_hcd
+sys/bus/usb/devices/usb17/product	USB/IP Virtual Host Controller
+sys/bus/usb/devices/usb17/serial	vhci_hcd.0
+sys/bus/usb/devices/usb17/speed	480
+sys/bus/usb/devices/usb18/authorized	1
+sys/bus/usb/devices/usb18/bDeviceClass	09
+sys/bus/usb/devices/usb18/busnum	18
+sys/bus/usb/devices/usb18/devnum	1
+sys/bus/usb/devices/usb18/idProduct	0003
+sys/bus/usb/devices/usb18/idVendor	1d6b
+sys/bus/usb/devices/usb18/manufacturer	Linux 6.18.42-talos vhci_hcd
+sys/bus/usb/devices/usb18/product	USB/IP Virtual Host Controller
+sys/bus/usb/devices/usb18/serial	vhci_hcd.0
+sys/bus/usb/devices/usb18/speed	10000
+sys/bus/usb/devices/usb2/authorized	1
+sys/bus/usb/devices/usb2/bDeviceClass	09
+sys/bus/usb/devices/usb2/busnum	2
+sys/bus/usb/devices/usb2/devnum	1
+sys/bus/usb/devices/usb2/idProduct	0003
+sys/bus/usb/devices/usb2/idVendor	1d6b
+sys/bus/usb/devices/usb2/manufacturer	Linux 6.18.42-talos xhci-hcd
+sys/bus/usb/devices/usb2/product	xHCI Host Controller
+sys/bus/usb/devices/usb2/serial	PNP0D10:00
+sys/bus/usb/devices/usb2/speed	10000
+sys/bus/usb/devices/usb3/authorized	1
+sys/bus/usb/devices/usb3/bDeviceClass	09
+sys/bus/usb/devices/usb3/busnum	3
+sys/bus/usb/devices/usb3/devnum	1
+sys/bus/usb/devices/usb3/idProduct	0002
+sys/bus/usb/devices/usb3/idVendor	1d6b
+sys/bus/usb/devices/usb3/manufacturer	Linux 6.18.42-talos xhci-hcd
+sys/bus/usb/devices/usb3/product	xHCI Host Controller
+sys/bus/usb/devices/usb3/serial	PNP0D10:01
+sys/bus/usb/devices/usb3/speed	480
+sys/bus/usb/devices/usb4/authorized	1
+sys/bus/usb/devices/usb4/bDeviceClass	09
+sys/bus/usb/devices/usb4/busnum	4
+sys/bus/usb/devices/usb4/devnum	1
+sys/bus/usb/devices/usb4/idProduct	0003
+sys/bus/usb/devices/usb4/idVendor	1d6b
+sys/bus/usb/devices/usb4/manufacturer	Linux 6.18.42-talos xhci-hcd
+sys/bus/usb/devices/usb4/product	xHCI Host Controller
+sys/bus/usb/devices/usb4/serial	PNP0D10:01
+sys/bus/usb/devices/usb4/speed	10000
+sys/bus/usb/devices/usb5/authorized	1
+sys/bus/usb/devices/usb5/bDeviceClass	09
+sys/bus/usb/devices/usb5/busnum	5
+sys/bus/usb/devices/usb5/devnum	1
+sys/bus/usb/devices/usb5/idProduct	0002
+sys/bus/usb/devices/usb5/idVendor	1d6b
+sys/bus/usb/devices/usb5/manufacturer	Linux 6.18.42-talos xhci-hcd
+sys/bus/usb/devices/usb5/product	xHCI Host Controller
+sys/bus/usb/devices/usb5/serial	PNP0D10:02
+sys/bus/usb/devices/usb5/speed	480
+sys/bus/usb/devices/usb6/authorized	1
+sys/bus/usb/devices/usb6/bDeviceClass	09
+sys/bus/usb/devices/usb6/busnum	6
+sys/bus/usb/devices/usb6/devnum	1
+sys/bus/usb/devices/usb6/idProduct	0003
+sys/bus/usb/devices/usb6/idVendor	1d6b
+sys/bus/usb/devices/usb6/manufacturer	Linux 6.18.42-talos xhci-hcd
+sys/bus/usb/devices/usb6/product	xHCI Host Controller
+sys/bus/usb/devices/usb6/serial	PNP0D10:02
+sys/bus/usb/devices/usb6/speed	10000
+sys/bus/usb/devices/usb7/authorized	1
+sys/bus/usb/devices/usb7/bDeviceClass	09
+sys/bus/usb/devices/usb7/busnum	7
+sys/bus/usb/devices/usb7/devnum	1
+sys/bus/usb/devices/usb7/idProduct	0002
+sys/bus/usb/devices/usb7/idVendor	1d6b
+sys/bus/usb/devices/usb7/manufacturer	Linux 6.18.42-talos xhci-hcd
+sys/bus/usb/devices/usb7/product	xHCI Host Controller
+sys/bus/usb/devices/usb7/serial	PNP0D10:03
+sys/bus/usb/devices/usb7/speed	480
+sys/bus/usb/devices/usb8/authorized	1
+sys/bus/usb/devices/usb8/bDeviceClass	09
+sys/bus/usb/devices/usb8/busnum	8
+sys/bus/usb/devices/usb8/devnum	1
+sys/bus/usb/devices/usb8/idProduct	0003
+sys/bus/usb/devices/usb8/idVendor	1d6b
+sys/bus/usb/devices/usb8/manufacturer	Linux 6.18.42-talos xhci-hcd
+sys/bus/usb/devices/usb8/product	xHCI Host Controller
+sys/bus/usb/devices/usb8/serial	PNP0D10:03
+sys/bus/usb/devices/usb8/speed	10000
+sys/bus/usb/devices/usb9/authorized	1
+sys/bus/usb/devices/usb9/bDeviceClass	09
+sys/bus/usb/devices/usb9/busnum	9
+sys/bus/usb/devices/usb9/devnum	1
+sys/bus/usb/devices/usb9/idProduct	0002
+sys/bus/usb/devices/usb9/idVendor	1d6b
+sys/bus/usb/devices/usb9/manufacturer	Linux 6.18.42-talos xhci-hcd
+sys/bus/usb/devices/usb9/product	xHCI Host Controller
+sys/bus/usb/devices/usb9/serial	PNP0D10:04
+sys/bus/usb/devices/usb9/speed	480
