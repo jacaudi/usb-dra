@@ -1,0 +1,54 @@
+sys/bus/usb/devices/1-0:1.0/bInterfaceClass	09
+sys/bus/usb/devices/1-0:1.0/bInterfaceNumber	00
+sys/bus/usb/devices/1-1/authorized	1
+sys/bus/usb/devices/1-1/bDeviceClass	09
+sys/bus/usb/devices/1-1/busnum	1
+sys/bus/usb/devices/1-1/devnum	2
+sys/bus/usb/devices/1-1/idProduct	8002
+sys/bus/usb/devices/1-1/idVendor	8087
+sys/bus/usb/devices/1-1/speed	480
+sys/bus/usb/devices/1-1:1.0/bInterfaceClass	09
+sys/bus/usb/devices/1-1:1.0/bInterfaceNumber	00
+sys/bus/usb/devices/2-0:1.0/bInterfaceClass	09
+sys/bus/usb/devices/2-0:1.0/bInterfaceNumber	00
+sys/bus/usb/devices/2-1.6/authorized	1
+sys/bus/usb/devices/2-1.6/bDeviceClass	09
+sys/bus/usb/devices/2-1.6/busnum	2
+sys/bus/usb/devices/2-1.6/devnum	4
+sys/bus/usb/devices/2-1.6/idProduct	a001
+sys/bus/usb/devices/2-1.6/idVendor	413c
+sys/bus/usb/devices/2-1.6/manufacturer	no manufacturer
+sys/bus/usb/devices/2-1.6/product	Gadget USB HUB
+sys/bus/usb/devices/2-1.6/serial	0123456789
+sys/bus/usb/devices/2-1.6/speed	480
+sys/bus/usb/devices/2-1.6:1.0/bInterfaceClass	09
+sys/bus/usb/devices/2-1.6:1.0/bInterfaceNumber	00
+sys/bus/usb/devices/2-1/authorized	1
+sys/bus/usb/devices/2-1/bDeviceClass	09
+sys/bus/usb/devices/2-1/busnum	2
+sys/bus/usb/devices/2-1/devnum	2
+sys/bus/usb/devices/2-1/idProduct	800a
+sys/bus/usb/devices/2-1/idVendor	8087
+sys/bus/usb/devices/2-1/speed	480
+sys/bus/usb/devices/2-1:1.0/bInterfaceClass	09
+sys/bus/usb/devices/2-1:1.0/bInterfaceNumber	00
+sys/bus/usb/devices/usb1/authorized	1
+sys/bus/usb/devices/usb1/bDeviceClass	09
+sys/bus/usb/devices/usb1/busnum	1
+sys/bus/usb/devices/usb1/devnum	1
+sys/bus/usb/devices/usb1/idProduct	0002
+sys/bus/usb/devices/usb1/idVendor	1d6b
+sys/bus/usb/devices/usb1/manufacturer	Linux 6.18.42-talos ehci_hcd
+sys/bus/usb/devices/usb1/product	EHCI Host Controller
+sys/bus/usb/devices/usb1/serial	0000:00:1d.0
+sys/bus/usb/devices/usb1/speed	480
+sys/bus/usb/devices/usb2/authorized	1
+sys/bus/usb/devices/usb2/bDeviceClass	09
+sys/bus/usb/devices/usb2/busnum	2
+sys/bus/usb/devices/usb2/devnum	1
+sys/bus/usb/devices/usb2/idProduct	0002
+sys/bus/usb/devices/usb2/idVendor	1d6b
+sys/bus/usb/devices/usb2/manufacturer	Linux 6.18.42-talos ehci_hcd
+sys/bus/usb/devices/usb2/product	EHCI Host Controller
+sys/bus/usb/devices/usb2/serial	0000:00:1a.0
+sys/bus/usb/devices/usb2/speed	480
