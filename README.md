@@ -20,8 +20,9 @@ device, except:
   keyboard or a Bluetooth dongle is never claimable by accident. Only interface classes
   count, never `bDeviceClass`: real devices report `00` or `ef` there.
 - **Unconfigured devices** with no interface entries, and devices whose attribute files
-  cannot be read mid-enumeration. These are skipped for that scan and logged at `-v=2`; an
-  entry missing one of its identity files is dropped silently.
+  cannot be read mid-enumeration, or whose root hub speed is unknown. These are skipped for
+  that scan and logged at `-v=2`; an entry missing one of its identity files is dropped
+  silently.
 
 Two flags tune the filter:
 
@@ -34,6 +35,9 @@ An invalid value for either flag is a startup error. The other flags are `--driv
 `--node-name` (default `$NODE_NAME`), `--cdi-root`, `--kubelet-registrar-dir`,
 `--kubelet-plugin-dir`, `--sysfs-root` and `--rescan-interval`; see `--help`.
 
+A node publishes at most 128 devices (the ResourceSlice limit); any beyond that are not
+published and an error is logged.
+
 A node with no eligible devices still publishes an empty pool. "Pool with no devices" tells
 the scheduler the driver is healthy and has nothing to offer, which differs from "no pool at
 all", and it avoids leaving a stale slice behind when the last device is unplugged.
@@ -44,7 +48,7 @@ Every device gets a name `usb-<vid>-<pid>-<id>`, lowercased and sanitized to a D
 name over 63 characters is truncated and suffixed with a short hash).
 
 - **Serial identity.** The device has a usable serial: non-empty, valid UTF-8, at most 64
-  bytes, and not all zeros. `<id>` is the serial, for example `usb-0bda-2838-35650102`.
+  bytes, free of control characters, and not all zeros. `<id>` is the serial, for example `usb-0bda-2838-35650102`.
 - **Port identity.** Everything else. `<id>` is `p-<port>`, for example
   `usb-1a86-7523-p-0000-00-14-0-v2-1-4`.
 
@@ -75,7 +79,7 @@ All attributes are strings under `device.attributes["usb.jacaudi.dev"]`.
 | `product` | always | 4 chars | `8029` |
 | `identity` | always | | `serial` or `port` |
 | `port` | always; a device whose port exceeds 64 bytes is skipped and logged | 64 bytes | `PNP0D10:02-v2-1` |
-| `serial` | when non-empty, valid UTF-8, at most 64 bytes and not all zeros (duplicates included) | 64 bytes | `FD14948954CD1F4F` |
+| `serial` | when non-empty, valid UTF-8, at most 64 bytes, free of control characters and not all zeros (duplicates included) | 64 bytes | `FD14948954CD1F4F` |
 | `manufacturer` | when reported and valid UTF-8; truncated on a rune boundary | 64 bytes | `RAKwireless` |
 | `productName` | same as `manufacturer` | 64 bytes | `WisCore RAK4631 Board` |
 | `interfaceClasses` | when at most 64 bytes; sorted unique, comma-joined | 64 bytes | `02,0a` |
@@ -247,12 +251,12 @@ a driver restart.
 
 Each device entry records the device name, the request, and the port. On prepare, the driver
 resolves each allocated device by name from a fresh sysfs scan, then refuses any device that
-another claim already holds in the checkpoint, matching on device name or on port (so a device
+another claim already holds in the checkpoint, matching on device name, or on port (so a device
 that comes back under a new name on the same port is still caught) unless the holder's device
 is attached on a different port now. Re-preparing a known claim
 rewrites its CDI spec, which rebuilds the spec after a node reboot empties `/var/run/cdi`.
 Allocation results with `adminAccess` are rejected, because two processes sharing a USB device
-or tty corrupt each other. Unprepare always removes the spec and checkpoint entry by claim
+or tty corrupt each other. Results from a pool other than this node's pool are rejected too. Unprepare always removes the spec and checkpoint entry by claim
 UID, and succeeds for an unknown claim.
 
 A missing checkpoint is an empty state. An unreadable, unparseable or unknown-version file
