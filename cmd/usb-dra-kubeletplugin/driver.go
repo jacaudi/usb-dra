@@ -172,6 +172,9 @@ func (d *driver) resolveClaim(claim *resourceapi.ResourceClaim) ([]preparedDevic
 		if res.AdminAccess != nil && *res.AdminAccess {
 			return nil, errors.New("admin access is not supported")
 		}
+		if res.Pool != d.nodeName {
+			return nil, fmt.Errorf("device %q is allocated from pool %q, want this node's pool %q", res.Device, res.Pool, d.nodeName)
+		}
 		results = append(results, res)
 	}
 	if len(results) == 0 {

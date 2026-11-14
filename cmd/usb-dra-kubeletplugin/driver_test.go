@@ -497,3 +497,17 @@ func TestPrepareAfterPortSwap(t *testing.T) {
 	prepareOK(t, d, "uid-a", allocResult(rtlName))
 	prepareOK(t, d, "uid-b", allocResult(otherRTL))
 }
+
+func TestPrepareOnlyServesThisNodesPool(t *testing.T) {
+	d, cdiRoot := newTestDriver(t, loadFixture(t, "talos-05-wrk"))
+
+	result := allocResultFor("lora", rakName)
+	result.Pool = "other-node"
+	res := d.prepareOne(t.Context(), claimFor("uid-a", result))
+	if res.Err == nil || !strings.Contains(res.Err.Error(), "other-node") {
+		t.Fatalf("Err = %v, want a rejection naming the pool", res.Err)
+	}
+	if entries, _ := os.ReadDir(cdiRoot); len(entries) != 0 {
+		t.Errorf("a rejected claim must not leave a CDI spec: %v", entries)
+	}
+}
