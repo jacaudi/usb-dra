@@ -44,6 +44,9 @@ func TestParseFlagsRejectsBadValues(t *testing.T) {
 	for _, tc := range []struct{ arg, want string }{
 		{"--exclude-classes=zz", "exclude-classes"},
 		{"--include=239a", "include"},
+		{"stray", "unexpected arguments"},
+		{"--rescan-interval=0s", "rescan-interval"},
+		{"--rescan-interval=-1s", "rescan-interval"},
 	} {
 		_, err := parseFlags([]string{tc.arg})
 		if err == nil || !strings.Contains(err.Error(), tc.want) {

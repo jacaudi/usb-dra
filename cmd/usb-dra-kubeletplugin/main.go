@@ -60,6 +60,12 @@ func parseFlags(args []string) (config, error) {
 	if err := flags.Parse(args); err != nil {
 		return config{}, err
 	}
+	if flags.NArg() > 0 {
+		return config{}, fmt.Errorf("unexpected arguments: %q", flags.Args())
+	}
+	if *rescan <= 0 {
+		return config{}, errors.New("--rescan-interval must be greater than zero")
+	}
 
 	filter, err := parseFilter(*excludeClasses, includes)
 	if err != nil {
