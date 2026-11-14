@@ -62,9 +62,10 @@ makes one of these tests fail, the change is wrong, not the test.
 11. **Prepared state survives a driver restart:** the checkpoint is written atomically and
     loaded before registration. Tests: `TestCheckpointSurvivesDriverRestart`,
     `TestSaveFailureLeavesStateUnchanged`.
-12. **A device prepared for one claim is never prepared for another; admin-access results are
-    rejected.** Tests: `TestPrepareRejectsDeviceHeldByOtherClaim`,
-    `TestPrepareRejectsSamePortUnderNewName`, `TestPrepareRejectsAdminAccess`.
+12. **A device prepared for one claim is never prepared for another, by device name or last
+    recorded port; admin-access results are rejected.** Tests:
+    `TestPrepareRejectsDeviceHeldByOtherClaim`, `TestPrepareRejectsSamePortUnderNewName`,
+    `TestPrepareAfterPortSwap`, `TestPrepareRejectsAdminAccess`.
 
 ## Deployment gotchas
 
