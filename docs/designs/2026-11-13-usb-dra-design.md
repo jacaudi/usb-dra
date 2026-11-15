@@ -177,7 +177,7 @@ Files: `internal/usb/sysfs.go`.
 
 Every device gets a candidate name from its identity, then names are made unique.
 
-- **Usable serial**: non-empty, valid UTF-8, ≤ 64 bytes, not all zeros (`^0+$`, e.g. the
+- **Usable serial**: non-empty, valid UTF-8, ≤ 64 bytes, no control characters, not all zeros (`^0+$`, e.g. the
   MediaTek's `000000000`).
 - **Serial identity** (devices with a usable serial): `<id>` = the serial.
 - **Port identity** (everything else): `<id>` = `p-<port>`.
@@ -215,7 +215,7 @@ Files: `internal/usb/identity.go` and `internal/usb/usb.go`.
 | `product` | string | always | 4 chars | `8029` |
 | `identity` | string | always | — | `serial` or `port` |
 | `port` | string | always; a device whose port exceeds 64 bytes is skipped and logged | ≤ 64 bytes | `PNP0D10:02-v2-1` |
-| `serial` | string | when non-empty, valid UTF-8, ≤ 64 bytes and not all zeros (duplicates included) | ≤ 64 bytes | `FD14948954CD1F4F` |
+| `serial` | string | when non-empty, valid UTF-8, ≤ 64 bytes, free of control characters and not all zeros (duplicates included) | ≤ 64 bytes | `FD14948954CD1F4F` |
 | `manufacturer` | string | when reported and valid UTF-8; truncated on a rune boundary to ≤ 64 bytes | ≤ 64 bytes | `RAKwireless` |
 | `productName` | string | same as `manufacturer` | ≤ 64 bytes | `WisCore RAK4631 Board` |
 | `interfaceClasses` | string | when ≤ 64 bytes; sorted unique, comma-joined | ≤ 64 bytes | `02,0a` |
