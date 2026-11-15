@@ -55,6 +55,54 @@ subjects:
     name: usb-dra
     namespace: kube-system
 ---
+# RBAC cannot scope resourceslices by node, so this policy does: the driver may write
+# only its own node's usb.jacaudi.dev slices. The node comes from the pod-bound token,
+# so root on one node cannot forge, rewrite or delete another node's pool or another
+# driver's slices. Rename the service account or namespace above and this must follow.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: usb-dra-resourceslices
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups:
+          - resource.k8s.io
+        apiVersions:
+          - "*"
+        operations:
+          - CREATE
+          - UPDATE
+          - DELETE
+        resources:
+          - resourceslices
+  matchConditions:
+    - name: usb-dra-service-account
+      expression: request.userInfo.username == "system:serviceaccount:kube-system:usb-dra"
+  variables:
+    - name: userNodeName
+      expression: request.userInfo.extra[?'authentication.kubernetes.io/node-name'][0].orValue('')
+    # UPDATE checks the old and new slice; DELETE has only oldObject.
+    - name: slices
+      expression: "[object, oldObject].filter(s, s != null)"
+  validations:
+    - expression: variables.userNodeName != ''
+      message: the usb-dra service account token is not bound to a node
+    - expression: variables.slices.all(s, s.spec.?nodeName.orValue('') == variables.userNodeName)
+      messageExpression: '"usb-dra on node " + variables.userNodeName + " may only write ResourceSlices for that node"'
+    - expression: variables.slices.all(s, s.spec.driver == 'usb.jacaudi.dev')
+      message: usb-dra may only write ResourceSlices for driver usb.jacaudi.dev
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: usb-dra-resourceslices
+spec:
+  policyName: usb-dra-resourceslices
+  validationActions:
+    - Deny
+---
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
