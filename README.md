@@ -298,6 +298,12 @@ DaemonSet runs as root and privileged on every node: the plugin socket and CDI d
 root-owned on the host. If a node's containerd uses a different `cdi_spec_dirs`, set
 `--cdi-root` and the DaemonSet's CDI mount to match.
 
+RBAC cannot scope ResourceSlice writes by node, so `deploy/daemonset.yaml` also ships a
+ValidatingAdmissionPolicy: the driver's service account may write only its own node's
+`usb.jacaudi.dev` slices. It reads the node from the pod-bound service account token, which
+Kubernetes 1.34 includes by default. If you rename the service account or its namespace,
+update the policy's match condition to match.
+
 The Docker build does not run tests. Run `task test` locally or in CI.
 
 ## Upgrading from rtlsdr-dra
