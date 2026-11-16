@@ -14,7 +14,7 @@ persistence:
     hostPathType: Directory
   cdi:
     type: hostPath
-    hostPath: {{ .Values.driver.cdiRoot }}
+    hostPath: {{ .Values.driver.cdiRoot | quote }}
     hostPathType: DirectoryOrCreate
   sys:
     type: hostPath
