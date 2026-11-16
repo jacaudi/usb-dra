@@ -48,3 +48,29 @@ tasks:
     desc: Build artefacts
     cmds:
       - task: go:build
+
+  # A kubelet plugin cannot fully boot without a kubelet and an API server, so smoke
+  # asserts what breaks deployment: the image runs as root (a :nonroot base dies
+  # creating its socket under /var/lib/kubelet/plugins) and the binary starts.
+  # Runs locally: IMAGE=ghcr.io/jacaudi/usb-dra@sha256:... task smoke
+  smoke:
+    desc: Assert the built image runs as root and the binary starts
+    requires:
+      vars: [IMAGE]
+    # Accepts BOTH `IMAGE=… task smoke` and `task smoke IMAGE=…`. Without this,
+    # the CLI form satisfies `requires` but leaves $IMAGE empty in the shell.
+    env:
+      IMAGE: '{{.IMAGE}}'
+    cmds:
+      - |
+        set -eu
+        echo "smoke testing ${IMAGE}"
+        if ! docker image inspect "${IMAGE}" >/dev/null 2>&1; then docker pull --quiet "${IMAGE}" >/dev/null; fi
+        user=$(docker image inspect --format '{{"{{.Config.User}}"}}' "${IMAGE}")
+        case "${user}" in
+          ""|0|root|0:0) echo "ok: runs as root (User='${user}')" ;;
+          *) echo "::error::image runs as '${user}'; the plugin needs root"; exit 1 ;;
+        esac
+        out=$(docker run --rm "${IMAGE}" --help 2>&1) || { echo "${out}"; echo "::error::--help exited non-zero"; exit 1; }
+        echo "${out}" | grep -q -- '-driver-name' || { echo "${out}"; echo "::error::--help printed no flag usage"; exit 1; }
+        echo "ok: binary starts"
