@@ -77,15 +77,17 @@ jobs:
   test:
     uses: ./.github/workflows/ci-test.yml
 
+  # Local modification: only `release` gets the App secrets. Every registry job
+  # (build, smoke, release-image, release-smoke) uses GITHUB_TOKEN, because GHCR
+  # refuses App installation tokens for packages owned by a personal account
+  # ("installation not allowed to Write organization package"). Same as
+  # jacaudi/nextdns-operator.
   build:
     needs: [context, test]
     if: ${{ needs.context.outputs.build == 'true' }}
     permissions:
       contents: read
       packages: write
-    secrets:
-      APP_ID: ${{ secrets.APP_ID }}
-      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
     uses: ./.github/workflows/ci-build.yml
 
   smoke:
@@ -93,9 +95,6 @@ jobs:
     permissions:
       contents: read
       packages: read
-    secrets:
-      APP_ID: ${{ secrets.APP_ID }}
-      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
     uses: ./.github/workflows/ci-smoke.yml
     with:
       image: ${{ needs.build.outputs.image }}
@@ -117,9 +116,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-    secrets:
-      APP_ID: ${{ secrets.APP_ID }}
-      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
     uses: ./.github/workflows/ci-build.yml
     with:
       version: ${{ needs.release.outputs.tag_name }}
@@ -130,9 +126,6 @@ jobs:
     permissions:
       contents: read
       packages: read
-    secrets:
-      APP_ID: ${{ secrets.APP_ID }}
-      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
     uses: ./.github/workflows/ci-smoke.yml
     with:
       image: ${{ needs.release-image.outputs.image }}
