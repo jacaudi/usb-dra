@@ -45,7 +45,7 @@
           "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
         },
         "verbosity": { "type": "integer", "minimum": 0, "maximum": 10 },
-        "cdiRoot": { "type": "string", "pattern": "^/" }
+        "cdiRoot": { "description": "A clean absolute path: it is interpolated into the DaemonSet args and a hostPath, which must agree.", "type": "string", "pattern": "^/[A-Za-z0-9._/-]*$" }
       }
     },
     "resources": {

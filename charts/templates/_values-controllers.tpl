@@ -15,7 +15,7 @@ controllers:
       hostIPC: false
       hostNetwork: false
       hostPID: false
-      priorityClassName: {{ .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName | quote }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
@@ -27,7 +27,7 @@ controllers:
     containers:
       plugin:
         image:
-          repository: {{ .Values.image.repository }}
+          repository: {{ .Values.image.repository | quote }}
           tag: {{ include "usb-dra.imageTag" . | quote }}
           pullPolicy: {{ .Values.image.pullPolicy }}
         args:

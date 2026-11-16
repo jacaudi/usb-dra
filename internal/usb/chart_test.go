@@ -339,11 +339,39 @@ func TestChartSchemaRejects(t *testing.T) {
 		"global.fullnameOverride=x",
 		"global.alwaysAppendIdentifierToResourceName=true",
 		"image.pullPolicy=Sometimes",
+		"driver.cdiRoot=/a: b",
+		"driver.cdiRoot=/run/cdi #x",
 	} {
 		t.Run(set, func(t *testing.T) {
 			if _, err := renderChart(t, "usb-dra", "kube-system", "--set", set); err == nil {
 				t.Errorf("--set %s rendered, want a schema error", set)
 			}
 		})
+	}
+}
+
+// TestChartCDIRootMovesTogether guards the Global Constraint that --cdi-root, the cdi hostPath and its mountPath are one value, and that moving it never drops another host mount.
+func TestChartCDIRootMovesTogether(t *testing.T) {
+	const root = "/run/cdi-x.y_z"
+	ds := onlyKind[appsv1.DaemonSet](t, mustRender(t, "usb-dra", "kube-system", "--set", "driver.cdiRoot="+root), "DaemonSet")
+	pod := ds.Spec.Template.Spec
+	c := pluginContainer(t, ds)
+
+	if len(pod.Volumes) != 4 || len(c.VolumeMounts) != 4 {
+		t.Fatalf("want 4 volumes and 4 mounts, got %d and %d", len(pod.Volumes), len(c.VolumeMounts))
+	}
+	if want := "--cdi-root=" + root; !slices.Contains(c.Args, want) {
+		t.Errorf("args = %q, want %q", c.Args, want)
+	}
+	vi := slices.IndexFunc(pod.Volumes, func(v corev1.Volume) bool { return v.Name == "cdi" })
+	mi := slices.IndexFunc(c.VolumeMounts, func(m corev1.VolumeMount) bool { return m.Name == "cdi" })
+	if vi < 0 || mi < 0 {
+		t.Fatalf("cdi volume (%d) or mount (%d) missing", vi, mi)
+	}
+	if hp := pod.Volumes[vi].HostPath; hp == nil || hp.Path != root {
+		t.Errorf("cdi hostPath = %+v, want %s", hp, root)
+	}
+	if got := c.VolumeMounts[mi].MountPath; got != root {
+		t.Errorf("cdi mountPath = %q, want %s", got, root)
 	}
 }
