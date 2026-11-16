@@ -40,7 +40,7 @@ func (c *cdiHandler) writeClaimSpec(claimUID string, devices []preparedDevice) e
 		})
 	}
 
-	version, err := cdiapi.MinimumRequiredVersion(spec)
+	version, err := cdispec.MinimumRequiredVersion(spec)
 	if err != nil {
 		return fmt.Errorf("determine CDI spec version: %w", err)
 	}
