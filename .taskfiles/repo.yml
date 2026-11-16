@@ -92,7 +92,7 @@ tasks:
       # the migration instructs.
       - |
         set -eu
-        for c in $(find . -name Chart.yaml -not -path './.git/*' -not -path '*/charts/*'); do
+        for c in $(find . -name Chart.yaml -not -path './.git/*' -not -path '*/charts/charts/*'); do
           d=$(dirname "${c}")
           count=$(yq '.dependencies | length // 0' "${c}")
           [ "${count}" -gt 0 ] || continue
@@ -116,7 +116,7 @@ tasks:
       - task: chart:deps
       - |
         set -eu
-        charts=$(find . -name Chart.yaml -not -path './.git/*' -not -path '*/charts/*')
+        charts=$(find . -name Chart.yaml -not -path './.git/*' -not -path '*/charts/charts/*')
         [ -n "${charts}" ] || { echo "no chart — skipping helm lint"; exit 0; }
         command -v helm >/dev/null \
           || { echo "helm not installed: brew install helm" >&2; exit 1; }

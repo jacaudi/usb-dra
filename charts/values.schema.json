@@ -1,0 +1,76 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "common": {
+      "description": "Helm injects the common dependency's own defaults under its chart name. Nothing here reads them: common.yaml renders from a fresh dict.",
+      "type": "object"
+    },
+    "global": {
+      "description": "Required by common's name helpers. Only labels and annotations are accepted: every name override would let an object drift from the service account the admission policy guards.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "labels": { "type": "object", "additionalProperties": { "type": "string" } },
+        "annotations": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    },
+    "image": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string" },
+        "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+      }
+    },
+    "driver": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "excludeClasses": {
+          "description": "Comma-separated USB interface classes, two lowercase hex digits each, as --exclude-classes validates them.",
+          "type": "string",
+          "pattern": "^([0-9a-f]{2}(,[0-9a-f]{2})*)?$"
+        },
+        "include": {
+          "description": "Devices published despite excludeClasses, each vid:pid or vid:pid:serial, as --include validates them.",
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[0-9a-f]{4}:[0-9a-f]{4}(:.+)?$" }
+        },
+        "rescanInterval": {
+          "description": "A Go duration greater than zero.",
+          "type": "string",
+          "pattern": "^([0-9]+(\\.[0-9]+)?(ns|us|µs|ms|s|m|h))+$"
+        },
+        "verbosity": { "type": "integer", "minimum": 0, "maximum": 10 },
+        "cdiRoot": { "type": "string", "pattern": "^/" }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "requests": { "type": "object", "additionalProperties": { "type": ["string", "number"] } },
+        "limits": { "type": "object", "additionalProperties": { "type": ["string", "number"] } }
+      }
+    },
+    "nodeSelector": { "type": "object", "additionalProperties": { "type": "string" } },
+    "tolerations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "key": { "type": "string" },
+          "operator": { "type": "string", "enum": ["Equal", "Exists"] },
+          "value": { "type": "string" },
+          "effect": { "type": "string", "enum": ["NoSchedule", "PreferNoSchedule", "NoExecute"] },
+          "tolerationSeconds": { "type": "integer" }
+        }
+      }
+    },
+    "priorityClassName": { "type": "string" }
+  }
+}

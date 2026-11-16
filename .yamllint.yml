@@ -25,7 +25,8 @@ ignore: |
   .worktrees/
   node_modules/
   vendor/
-  charts/
+  charts/templates/
+  charts/charts/
   # Helm chart templates are Go templates, not YAML — `{{- if }}` is a hard
   # syntax error to yamllint. `helm lint` + `helm template` cover them instead.
   templates/
