@@ -1,10 +1,12 @@
-# Orchestrator — local reusable stages, PR-gated builds, one aggregate check `ci`.
-# Scoped to test/lint/build: no smoke or release stages are wired in this repo.
-# Rationale: github-actions-align/templates/README.md#ciserviceyaml
+# Orchestrator (service variant) — local reusable stages, PR-gated builds, one required check `ci`. Rationale: github-actions-align/templates/README.md#ciserviceyaml
 name: CI
 
 # push only, no pull_request — branch-push checks surface on the PR anyway, and
 # adding pull_request would double-run every same-repo PR.
+#
+# THIS REQUIRES APP SECRETS. GITHUB_TOKEN cannot trigger workflows, so without
+# them release-please's own release PR gets no run, `ci` never reports, and the
+# PR is unmergeable forever. See README#github-app-handling.
 on:
   push:
     branches: ['**']
@@ -22,10 +24,28 @@ permissions:
 jobs:
   # Decides whether this push warrants building an image. Code testing always
   # runs; building does not — most feature-branch commits are WIP, and a
-  # multi-arch build is the bulk of the runner time and registry churn.
-  # A DRAFT PR counts.
+  # multi-arch build plus smoke on each is the bulk of the runner time and
+  # registry churn. A DRAFT PR counts.
+  #
+  # `needs: [test]` is NOT a data dependency — it is a freshness one, and it is
+  # load-bearing. This job's only input is "does an open PR exist for this
+  # branch?", which is a fact about the world that CHANGES while the run is in
+  # flight. Evaluated at push time it answers in ~4 s; `build`, the job it
+  # gates, cannot start until `test` finishes minutes later. `gh pr create`
+  # right after `git push` therefore lands inside that window, `context`
+  # answers "no open PR", build and smoke skip, and the `ci` rollup goes green
+  # having never built the image. That produced SEVEN silent false greens in
+  # one repo before this fix.
+  #
+  # Waiting for `test` does not make the query race-free, it makes the window
+  # minutes instead of seconds, which covers the push-then-open-PR flow
+  # completely. The residual case — a PR opened well after the push — is caught
+  # loudly by the `ci` gate's re-query below rather than passing silently.
+  # Deciding at the point of use instead of caching the answer is also just
+  # correct: `build` already needs `test`, so this costs ~4 s of wall clock.
   context:
     name: context
+    needs: [test]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -57,31 +77,129 @@ jobs:
   test:
     uses: ./.github/workflows/ci-test.yml
 
-  # No App secrets: ci-build falls back to GITHUB_TOKEN. GHCR refuses App
-  # installation tokens for packages owned by a personal account ("installation
-  # not allowed to Write organization package"); GITHUB_TOKEN can push.
   build:
     needs: [context, test]
     if: ${{ needs.context.outputs.build == 'true' }}
     permissions:
       contents: read
       packages: write
+    secrets:
+      APP_ID: ${{ secrets.APP_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
     uses: ./.github/workflows/ci-build.yml
 
-  # The single aggregate check.
+  smoke:
+    needs: [build]
+    permissions:
+      contents: read
+      packages: read
+    secrets:
+      APP_ID: ${{ secrets.APP_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+    uses: ./.github/workflows/ci-smoke.yml
+    with:
+      image: ${{ needs.build.outputs.image }}
+
+  release:
+    needs: [smoke]
+    if: ${{ github.ref == 'refs/heads/main' }}
+    permissions:
+      contents: write
+      pull-requests: write
+    secrets:
+      APP_ID: ${{ secrets.APP_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+    uses: ./.github/workflows/ci-release.yml
+
+  release-image:
+    needs: [release]
+    if: ${{ needs.release.outputs.release_created == 'true' }}
+    permissions:
+      contents: read
+      packages: write
+    secrets:
+      APP_ID: ${{ secrets.APP_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+    uses: ./.github/workflows/ci-build.yml
+    with:
+      version: ${{ needs.release.outputs.tag_name }}
+      ref: ${{ needs.release.outputs.tag_name }}   # pin to the TAG, not this run's commit
+
+  release-smoke:
+    needs: [release-image]
+    permissions:
+      contents: read
+      packages: read
+    secrets:
+      APP_ID: ${{ secrets.APP_ID }}
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+    uses: ./.github/workflows/ci-smoke.yml
+    with:
+      image: ${{ needs.release-image.outputs.image }}
+
+  # UNCOMMENT only in repos that ship a release manifest — the stock
+  # `task artifact` exits 1, so leaving this on breaks the first release.
+  # release-artifact:
+  #   needs: [release, release-image, release-smoke]
+  #   if: ${{ needs.release.outputs.release_created == 'true' }}
+  #   permissions: { contents: write, packages: read }
+  #   secrets:
+  #     APP_ID: ${{ secrets.APP_ID }}
+  #     APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+  #   uses: ./.github/workflows/ci-artifact.yml
+  #   with:
+  #     version: ${{ needs.release.outputs.tag_name }}
+  #     assets: release.yaml
+  #     verify-images: |
+  #       ghcr.io/${{ github.repository }}:${VERSION}
+
+  # UNCOMMENT only in repos with a chart (conventionally at charts/). Waits on
+  # release-smoke so a chart never ships pointing at an image that failed to
+  # boot; `!= 'failure'` keeps the chart-only release path working, where both
+  # upstream jobs are legitimately skipped.
+  # release-chart:
+  #   needs: [release, release-image, release-smoke]
+  #   if: ${{ !cancelled() && needs.release.outputs.chart_release_created == 'true'
+  #        && needs.release-image.result != 'failure' && needs.release-smoke.result != 'failure' }}
+  #   permissions: { contents: read, packages: write }
+  #   secrets:
+  #     APP_ID: ${{ secrets.APP_ID }}
+  #     APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+  #   uses: ./.github/workflows/ci-chart.yml
+  #   with:
+  #     version: ${{ needs.release.outputs.chart_version }}
+
+  # Multi-image repos: add one sibling ci-build job per image, NOT a matrix.
+  #   build-agent:
+  #     needs: [context, test]
+  #     if: ${{ needs.context.outputs.build == 'true' }}
+  #     permissions: { contents: read, packages: write }
+  #     secrets:
+  #       APP_ID: ${{ secrets.APP_ID }}
+  #       APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
+  #     uses: ./.github/workflows/ci-build.yml
+  #     with:
+  #       image: ghcr.io/${{ github.repository }}/agent
+  #       file: images/agent/Dockerfile
+
+  # THE single required status check — point every ruleset at `ci` and nothing else.
   ci:
-    # `context` MUST be here. Without it, a failing context skips build, this
-    # gate accepts `skipped`, and the check goes GREEN on a PR whose image was
-    # never built.
-    needs: [context, test, build]
+    # `context` MUST be here. Without it, a failing context skips build and
+    # smoke, this gate accepts `skipped`, and the required check goes GREEN on a
+    # PR whose image was never built or tested.
+    needs: [context, test, build, smoke]
     if: ${{ !cancelled() }}   # required: else this is SKIPPED on failure, which can satisfy protection
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read   # for the skipped-build re-query below
     steps:
       - name: Assert required stages
         env:
           CONTEXT: ${{ needs.context.result }}
           TEST: ${{ needs.test.result }}
           BUILD: ${{ needs.build.result }}
+          SMOKE: ${{ needs.smoke.result }}
         run: |
           set -euo pipefail
           fail=0
@@ -90,9 +208,38 @@ jobs:
             printf '%-8s %s (must be success)\n' "${name}" "${result}"
             [ "${result}" = "success" ] || fail=1
           done
-          # build skips legitimately when context says "no open PR" — and context
-          # is asserted successful above, so a skip here is a real decision rather
-          # than an upstream failure leaking through.
-          printf '%-8s %s (success, or skipped when no PR is open)\n' "build" "${BUILD}"
-          case "${BUILD}" in success|skipped) ;; *) fail=1 ;; esac
+          # build/smoke skip legitimately when context says "no open PR" — and
+          # context is asserted successful above, so a skip here is a real
+          # decision rather than an upstream failure leaking through.
+          for stage in build:"${BUILD}" smoke:"${SMOKE}"; do
+            name="${stage%%:*}"; result="${stage##*:}"
+            printf '%-8s %s (success, or skipped when no PR is open)\n' "${name}" "${result}"
+            case "${result}" in success|skipped) ;; *) fail=1 ;; esac
+          done
           [ "${fail}" = "0" ] || { echo "::error::one or more required stages did not pass"; exit 1; }
+
+      # The backstop for the assertion directly above. That loop accepts a
+      # skipped build/smoke on `context`'s word, and `context` answered minutes
+      # ago — so a PR opened after it ran turns "correctly skipped" into "green
+      # on an image that was never built". Re-asking HERE, at the end of the
+      # run, is the latest and therefore most accurate point available.
+      #
+      # This cannot fire on the normal flow now that `context` waits for
+      # `test`; it exists so the residual case is LOUD rather than silent.
+      - name: Reject a skipped image build while a PR is open
+        if: ${{ needs.build.result == 'skipped' || needs.smoke.result == 'skipped' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+            echo "on main — build/smoke are unconditional there, nothing to re-check"
+            exit 0
+          fi
+          n=$(gh pr list --repo "${GITHUB_REPOSITORY}" --head "${GITHUB_REF_NAME}" \
+                --state open --json number --jq 'length')
+          if [ "${n}" -gt 0 ]; then
+            echo "::error::build/smoke were skipped, but ${n} open PR(s) now exist for ${GITHUB_REF_NAME}. The image was never built or booted, so this run is not evidence the PR is mergeable. Re-run this workflow (gh run rerun <run-id>) now that the PR exists."
+            exit 1
+          fi
+          echo "no open PR for ${GITHUB_REF_NAME} — skipping build/smoke is correct"

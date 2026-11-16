@@ -95,6 +95,8 @@ jobs:
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          # Scoped to what this job does with it (registry push); zizmor github-app.
+          permission-packages: write
 
       - name: Docker meta
         id: meta
@@ -140,4 +142,6 @@ jobs:
 
       - name: Expose image reference (by digest)
         id: ref
-        run: echo "image=${IMAGE}@${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT"
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}   # via env: zizmor template-injection
+        run: echo "image=${IMAGE}@${DIGEST}" >> "$GITHUB_OUTPUT"

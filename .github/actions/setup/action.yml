@@ -23,12 +23,14 @@ runs:
     #     would install hadolint and then lint a JSON file.
     # Detection lives in detect.sh so tests/detect-test.sh exercises the SAME
     # code that ships here. Three fail-silent find traps are documented there.
+    # GITHUB_ACTION_PATH (env), not the github.action_path expression: no template
+    # expansion inside run:, per zizmor template-injection.
     - name: Detect repo shape
       id: d
       shell: bash
       run: |
         set -euo pipefail
-        out=$(bash "${{ github.action_path }}/detect.sh")
+        out=$(bash "${GITHUB_ACTION_PATH}/detect.sh")
         printf '%s\n' "${out}"
         printf '%s\n' "${out}" >> "$GITHUB_OUTPUT"
 
