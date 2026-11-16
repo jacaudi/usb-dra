@@ -57,18 +57,15 @@ jobs:
   test:
     uses: ./.github/workflows/ci-test.yml
 
-  # The App secrets are optional here: ci-build falls back to GITHUB_TOKEN, which
-  # can push to this repo's own GHCR namespace. They are wired anyway so adding
-  # them later needs no workflow change.
+  # No App secrets: ci-build falls back to GITHUB_TOKEN. GHCR refuses App
+  # installation tokens for packages owned by a personal account ("installation
+  # not allowed to Write organization package"); GITHUB_TOKEN can push.
   build:
     needs: [context, test]
     if: ${{ needs.context.outputs.build == 'true' }}
     permissions:
       contents: read
       packages: write
-    secrets:
-      APP_ID: ${{ secrets.APP_ID }}
-      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
     uses: ./.github/workflows/ci-build.yml
 
   # The single aggregate check.
