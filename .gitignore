@@ -59,3 +59,6 @@ config/**/*.local.yaml
 # Repo-specific entries below this line are preserved across regeneration.
 
 *.log
+
+# Vendored chart dependencies (helm dependency build)
+/charts/charts/
