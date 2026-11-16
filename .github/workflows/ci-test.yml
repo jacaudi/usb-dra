@@ -37,4 +37,5 @@ jobs:
           # The real base for this run: the PR's merge base, or the previous tip
           # on a push. Falls back to HEAD~1 inside the task when unset.
           BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
-        run: task ${{ inputs.task }}
+          TASK: ${{ inputs.task }}   # via env, not inline: zizmor template-injection
+        run: task "${TASK}"
