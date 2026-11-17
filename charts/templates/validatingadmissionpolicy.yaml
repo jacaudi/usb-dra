@@ -1,0 +1,54 @@
+{{- /*
+The policy and its binding name the service account the chart itself creates: both the policy
+name and the username are built from the same "usb-dra.name" helper that common receives as
+forceRename for the ServiceAccount, so they cannot drift apart.
+*/ -}}
+{{- $name := include "usb-dra.name" . -}}
+{{- $policy := printf "%s-resourceslices" $name -}}
+# RBAC cannot scope resourceslices by node, so this policy does: the driver may write
+# only its own node's usb.jacaudi.dev slices. The node comes from the pod-bound token,
+# so root on one node cannot forge, rewrite or delete another node's pool or another
+# driver's slices.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: {{ $policy | quote }}
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups:
+          - resource.k8s.io
+        apiVersions:
+          - "*"
+        operations:
+          - CREATE
+          - UPDATE
+          - DELETE
+        resources:
+          - resourceslices
+  matchConditions:
+    - name: usb-dra-service-account
+      expression: {{ printf "request.userInfo.username == %q" (printf "system:serviceaccount:%s:%s" .Release.Namespace $name) | quote }}
+  variables:
+    - name: userNodeName
+      expression: request.userInfo.extra[?'authentication.kubernetes.io/node-name'][0].orValue('')
+    # UPDATE checks the old and new slice; DELETE has only oldObject.
+    - name: slices
+      expression: "[object, oldObject].filter(s, s != null)"
+  validations:
+    - expression: variables.userNodeName != ''
+      message: the usb-dra service account token is not bound to a node
+    - expression: variables.slices.all(s, s.spec.?nodeName.orValue('') == variables.userNodeName)
+      messageExpression: '"usb-dra on node " + variables.userNodeName + " may only write ResourceSlices for that node"'
+    - expression: variables.slices.all(s, s.spec.driver == 'usb.jacaudi.dev')
+      message: usb-dra may only write ResourceSlices for driver usb.jacaudi.dev
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: {{ $policy | quote }}
+spec:
+  policyName: {{ $policy | quote }}
+  validationActions:
+    - Deny
