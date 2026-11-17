@@ -1,25 +1,2 @@
-global: {}                # required by common's name helpers; constrained by the schema
-image:
-  repository: ghcr.io/jacaudi/usb-dra
-  tag: ""                 # empty -> "v" + appVersion
-  pullPolicy: IfNotPresent
-driver:
-  excludeClasses: "03,08,e0"
-  include: []             # each "vid:pid" or "vid:pid:serial" -> one --include
-  rescanInterval: 30s
-  verbosity: 2
-  cdiRoot: /var/run/cdi   # --cdi-root AND the hostPath/mountPath move together
-deviceClasses:            # key -> DeviceClass "<key>.usb.jacaudi.dev"; null removes a default
-  rtl-sdr:
-    vendor: "0bda"
-    products: ["2838", "2832"]
-  rak4631:
-    vendor: "239a"
-    products: ["8029"]
-resources:
-  requests: {cpu: 10m, memory: 32Mi}
-  limits: {memory: 128Mi}
-nodeSelector: {}
-tolerations:
-  - operator: Exists      # every node: an empty pool means "healthy, no devices"
-priorityClassName: system-node-critical
+# Intentionally empty: every default lives in the templates. See examples/values.yaml and values.schema.json.
+{}

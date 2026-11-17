@@ -16,3 +16,13 @@ empty when the node has no eligible USB devices:
 
   kubectl get resourceslices
   kubectl get deviceclasses
+{{- $classes := 0 }}
+{{- range $_, $c := .Values.deviceClasses }}
+{{- if $c }}{{ $classes = add1 $classes }}{{ end }}
+{{- end }}
+{{- if not $classes }}
+
+No DeviceClasses were created, so no claim can select a device yet. Define one per device
+family under deviceClasses; examples/values.yaml in the usb-dra repository has the rtl-sdr
+and rak4631 classes.
+{{- end }}

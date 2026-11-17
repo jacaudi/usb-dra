@@ -42,12 +42,12 @@ func readDocs(t *testing.T, path string) [][]byte {
 	}
 }
 
-// loadSelectors returns the selector of each DeviceClass the chart renders by default and each example claim's class and first selector, "" when it has none.
+// loadSelectors returns the selector of each DeviceClass the example deployment renders and each example claim's class and first selector, "" when it has none.
 func loadSelectors(t *testing.T) (classes map[string]string, claims map[string]claimSel) {
 	t.Helper()
-	classes = renderedDeviceClasses(t)
+	classes = renderedDeviceClasses(t, "-f", exampleValues)
 	claims = map[string]claimSel{}
-	for _, doc := range readDocs(t, "../../deploy/claims.yaml") {
+	for _, doc := range readDocs(t, exampleClaims) {
 		var rct resourceapi.ResourceClaimTemplate
 		if err := sigsyaml.UnmarshalStrict(doc, &rct); err != nil {
 			t.Fatalf("decode ResourceClaimTemplate: %v", err)

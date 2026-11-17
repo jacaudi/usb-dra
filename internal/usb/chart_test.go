@@ -28,6 +28,12 @@ import (
 // chartDir is the chart under test, relative to this package.
 const chartDir = "../../charts"
 
+// The example deployment. The chart creates no DeviceClass by default, so every test that needs the rtl-sdr and rak4631 classes renders with exampleValues.
+const (
+	exampleValues = "../../examples/values.yaml"
+	exampleClaims = "../../examples/claims.yaml"
+)
+
 // buildChartDeps vendors the chart's common dependency into charts/charts/ once per test binary. "build", not "update", so Chart.lock is honoured.
 var buildChartDeps = sync.OnceValue(func() error {
 	out, err := exec.Command("helm", "dependency", "build", chartDir).CombinedOutput()
@@ -154,7 +160,8 @@ func TestChartDaemonSetFixedFields(t *testing.T) {
 		t.Errorf("tolerations = %+v, want %+v", pod.Tolerations, want)
 	}
 
-	wantArgs := []string{"--driver-name=usb.jacaudi.dev", "--rescan-interval=30s", "--exclude-classes=03,08,e0", "--cdi-root=/var/run/cdi", "-v=2"}
+	// The binary's own defaults for --exclude-classes and --rescan-interval are the single source, so a plain install passes neither.
+	wantArgs := []string{"--driver-name=usb.jacaudi.dev", "--cdi-root=/var/run/cdi", "-v=2"}
 	if !slices.Equal(c.Args, wantArgs) {
 		t.Errorf("args = %q, want %q", c.Args, wantArgs)
 	}
@@ -203,8 +210,7 @@ func TestChartArgsFromValues(t *testing.T) {
 	c := pluginContainer(t, ds)
 
 	wantArgs := []string{
-		"--driver-name=usb.jacaudi.dev", "--rescan-interval=30s", "--exclude-classes=03,08,e0",
-		"--include=0bda:2838", "--include=239a:8029:abc", "--cdi-root=/run/cdi", "-v=2",
+		"--driver-name=usb.jacaudi.dev", "--include=0bda:2838", "--include=239a:8029:abc", "--cdi-root=/run/cdi", "-v=2",
 	}
 	if !slices.Equal(c.Args, wantArgs) {
 		t.Errorf("args = %q, want %q", c.Args, wantArgs)
@@ -220,6 +226,63 @@ func TestChartArgsFromValues(t *testing.T) {
 	}
 	if got := c.VolumeMounts[mi].MountPath; got != "/run/cdi" {
 		t.Errorf("cdi mountPath = %q, want /run/cdi", got)
+	}
+}
+
+// TestChartArgsSetOnlyWhenProvided guards the "set, not truthy" rule: --exclude-classes and --rescan-interval appear exactly when the value is set, an empty exclude list still counts as set (it publishes everything but hubs), and a verbosity of 0 is not replaced by the default.
+func TestChartArgsSetOnlyWhenProvided(t *testing.T) {
+	tests := []struct {
+		name string
+		set  []string
+		want []string
+	}{
+		{
+			name: "exclude classes and rescan interval",
+			set:  []string{"--set", "driver.excludeClasses=03", "--set", "driver.rescanInterval=1m"},
+			want: []string{"--driver-name=usb.jacaudi.dev", "--rescan-interval=1m", "--exclude-classes=03", "--cdi-root=/var/run/cdi", "-v=2"},
+		},
+		{
+			name: "empty exclude classes is still passed",
+			set:  []string{"--set", "driver.excludeClasses="},
+			want: []string{"--driver-name=usb.jacaudi.dev", "--exclude-classes=", "--cdi-root=/var/run/cdi", "-v=2"},
+		},
+		{
+			name: "verbosity zero is not the default",
+			set:  []string{"--set", "driver.verbosity=0"},
+			want: []string{"--driver-name=usb.jacaudi.dev", "--cdi-root=/var/run/cdi", "-v=0"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := pluginContainer(t, onlyKind[appsv1.DaemonSet](t, mustRender(t, "usb-dra", "kube-system", tt.set...), "DaemonSet"))
+			if !slices.Equal(c.Args, tt.want) {
+				t.Errorf("args = %q, want %q", c.Args, tt.want)
+			}
+		})
+	}
+}
+
+// TestChartResourcesAreAllOrNothing guards that a set resources value replaces the template default whole, so resources: {} can drop requests and limits.
+func TestChartResourcesAreAllOrNothing(t *testing.T) {
+	c := pluginContainer(t, onlyKind[appsv1.DaemonSet](t, mustRender(t, "usb-dra", "kube-system", "--set", "resources.limits.memory=256Mi"), "DaemonSet"))
+	if got := c.Resources.Limits.Memory().String(); got != "256Mi" {
+		t.Errorf("memory limit = %s, want 256Mi", got)
+	}
+	if len(c.Resources.Requests) != 0 {
+		t.Errorf("requests = %v, want none: a set resources value replaces the default", c.Resources.Requests)
+	}
+}
+
+// TestChartDefaultInstallHasNoDeviceClasses guards the empty-values contract: a plain install creates the driver and its policy but no DeviceClass, because which devices to hand out is the operator's decision (examples/values.yaml).
+func TestChartDefaultInstallHasNoDeviceClasses(t *testing.T) {
+	docs := mustRender(t, "usb-dra", "kube-system")
+	if got := findKind(t, docs, "DeviceClass"); len(got) != 0 {
+		t.Errorf("a default install rendered %d DeviceClass objects, want none", len(got))
+	}
+	for _, kind := range []string{"DaemonSet", "ServiceAccount", "ClusterRole", "ClusterRoleBinding", "ValidatingAdmissionPolicy", "ValidatingAdmissionPolicyBinding"} {
+		if got := findKind(t, docs, kind); len(got) != 1 {
+			t.Errorf("a default install rendered %d %s objects, want 1", len(got), kind)
+		}
 	}
 }
 

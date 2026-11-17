@@ -13,5 +13,13 @@ Image tag: an explicit image.tag verbatim, else "v" + appVersion with any leadin
 stripped, matching the v-prefixed tags ci-build pushes.
 */}}
 {{- define "usb-dra.imageTag" -}}
-{{- .Values.image.tag | default (printf "v%s" (.Chart.AppVersion | trimPrefix "v")) -}}
+{{- dig "image" "tag" "" .Values.AsMap | default (printf "v%s" (.Chart.AppVersion | trimPrefix "v")) -}}
+{{- end -}}
+
+{{/*
+The CDI directory. values.yaml is empty, so the default lives here. It is a helper because
+--cdi-root and the cdi hostPath/mountPath must always be the same value.
+*/}}
+{{- define "usb-dra.cdiRoot" -}}
+{{- dig "driver" "cdiRoot" "/var/run/cdi" .Values.AsMap -}}
 {{- end -}}
