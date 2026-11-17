@@ -1,5 +1,5 @@
 {{/*
-RBAC, identical to what deploy/daemonset.yaml shipped.
+The RBAC the driver needs: write its own ResourceSlices, read ResourceClaims, get its Node.
 */}}
 {{- define "usb-dra.values.rbac" -}}
 rbac:

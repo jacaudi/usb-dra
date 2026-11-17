@@ -1,0 +1,19 @@
+{{- /*
+One DeviceClass per deviceClasses key, named "<key>.usb.jacaudi.dev". Each admits only this
+driver's devices of the class's vendor and one of its products. The driver name is the
+constant the code, the policy and the DeviceClasses all share. Hex IDs reach the expression
+verbatim: the schema guarantees they are four lowercase hex digits, so they need no escaping.
+*/ -}}
+{{- range $name, $c := .Values.deviceClasses }}
+{{- if $c }}
+---
+apiVersion: resource.k8s.io/v1
+kind: DeviceClass
+metadata:
+  name: {{ printf "%s.usb.jacaudi.dev" $name | quote }}
+spec:
+  selectors:
+    - cel:
+        expression: {{ printf `device.driver == "usb.jacaudi.dev" && device.attributes["usb.jacaudi.dev"].vendor == "%s" && device.attributes["usb.jacaudi.dev"].product in ["%s"]` $c.vendor (join `", "` $c.products) | quote }}
+{{- end }}
+{{- end }}

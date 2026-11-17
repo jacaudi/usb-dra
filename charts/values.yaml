@@ -9,6 +9,13 @@ driver:
   rescanInterval: 30s
   verbosity: 2
   cdiRoot: /var/run/cdi   # --cdi-root AND the hostPath/mountPath move together
+deviceClasses:            # key -> DeviceClass "<key>.usb.jacaudi.dev"; null removes a default
+  rtl-sdr:
+    vendor: "0bda"
+    products: ["2838", "2832"]
+  rak4631:
+    vendor: "239a"
+    products: ["8029"]
 resources:
   requests: {cpu: 10m, memory: 32Mi}
   limits: {memory: 128Mi}
