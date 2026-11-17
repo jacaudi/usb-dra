@@ -74,3 +74,23 @@ tasks:
         out=$(docker run --rm "${IMAGE}" --help 2>&1) || { echo "${out}"; echo "::error::--help exited non-zero"; exit 1; }
         echo "${out}" | grep -q -- '-driver-name' || { echo "${out}"; echo "::error::--help printed no flag usage"; exit 1; }
         echo "ok: binary starts"
+
+  # The release manifest uploaded to the GitHub Release by ci-artifact.yml, for
+  # installs without Helm. Rendered from the chart with the release tag as the image
+  # tag. Runs locally: task artifact VERSION=v0.1.0
+  artifact:
+    desc: Render the chart into release.yaml (the release manifest)
+    requires:
+      vars: [VERSION]
+    # Accepts BOTH `VERSION=… task artifact` and `task artifact VERSION=…`.
+    env:
+      VERSION: '{{.VERSION}}'
+    cmds:
+      - task: repo:chart:deps
+      - |
+        set -eu
+        {
+          echo "# usb-dra ${VERSION} — install into kube-system"
+          helm template usb-dra charts -n kube-system --set image.tag="${VERSION}"
+        } > release.yaml
+        echo "wrote release.yaml (${VERSION})"

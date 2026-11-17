@@ -130,37 +130,39 @@ jobs:
     with:
       image: ${{ needs.release-image.outputs.image }}
 
-  # UNCOMMENT only in repos that ship a release manifest — the stock
-  # `task artifact` exits 1, so leaving this on breaks the first release.
-  # release-artifact:
-  #   needs: [release, release-image, release-smoke]
-  #   if: ${{ needs.release.outputs.release_created == 'true' }}
-  #   permissions: { contents: write, packages: read }
-  #   secrets:
-  #     APP_ID: ${{ secrets.APP_ID }}
-  #     APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
-  #   uses: ./.github/workflows/ci-artifact.yml
-  #   with:
-  #     version: ${{ needs.release.outputs.tag_name }}
-  #     assets: release.yaml
-  #     verify-images: |
-  #       ghcr.io/${{ github.repository }}:${VERSION}
+  # Ships the rendered chart as release.yaml for installs without Helm. No App
+  # secrets, for the same GHCR reason as every other job below `release` (see the
+  # comment above `build`): verify-images pulls from GHCR, and GITHUB_TOKEN covers
+  # both that and the release-asset upload.
+  release-artifact:
+    needs: [release, release-image, release-smoke]
+    if: ${{ needs.release.outputs.release_created == 'true' }}
+    permissions:
+      contents: write
+      packages: read
+    uses: ./.github/workflows/ci-artifact.yml
+    with:
+      version: ${{ needs.release.outputs.tag_name }}
+      assets: release.yaml
+      verify-images: |
+        ghcr.io/${{ github.repository }}:${VERSION}
 
-  # UNCOMMENT only in repos with a chart (conventionally at charts/). Waits on
-  # release-smoke so a chart never ships pointing at an image that failed to
-  # boot; `!= 'failure'` keeps the chart-only release path working, where both
-  # upstream jobs are legitimately skipped.
-  # release-chart:
-  #   needs: [release, release-image, release-smoke]
-  #   if: ${{ !cancelled() && needs.release.outputs.chart_release_created == 'true'
-  #        && needs.release-image.result != 'failure' && needs.release-smoke.result != 'failure' }}
-  #   permissions: { contents: read, packages: write }
-  #   secrets:
-  #     APP_ID: ${{ secrets.APP_ID }}
-  #     APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
-  #   uses: ./.github/workflows/ci-chart.yml
-  #   with:
-  #     version: ${{ needs.release.outputs.chart_version }}
+  # Local modification (from towonel-operator, via nextdns-operator). The chart
+  # releases in LOCKSTEP with the app: one release-please package, chart version =
+  # app tag, so this keys on the app release rather than a separate chart
+  # package's outputs. Runs only after the release image exists and has booted.
+  # No App secrets: the chart pushes to GHCR, which rejects App tokens.
+  release-chart:
+    needs: [release, release-image, release-smoke]
+    if: ${{ needs.release.outputs.release_created == 'true' }}
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/ci-chart.yml
+    with:
+      chart-path: charts
+      version: ${{ needs.release.outputs.tag_name }}
+      ref: ${{ needs.release.outputs.tag_name }}   # package the TAG, not this run's commit
 
   # Multi-image repos: add one sibling ci-build job per image, NOT a matrix.
   #   build-agent:

@@ -62,3 +62,6 @@ config/**/*.local.yaml
 
 # Vendored chart dependencies (helm dependency build)
 /charts/charts/
+
+# Rendered by `task artifact`; uploaded to the GitHub Release, never committed
+/release.yaml

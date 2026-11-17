@@ -1,0 +1,122 @@
+# Generated files → GitHub Release; checks out the TAG, verifies pinned images exist, then uploads. Rationale: github-actions-align/templates/README.md#ci-artifactyml
+name: ci-artifact
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Release tag being published (e.g. v1.2.3).
+        required: true
+        type: string
+      assets:
+        description: Newline-separated file globs to upload to the Release.
+        required: false
+        default: release.yaml
+        type: string
+      verify-images:
+        description: >-
+          Newline-separated image refs the artifact pins, checked to exist before
+          upload. Empty skips the check. Use ${VERSION} for the tag.
+        required: false
+        default: ''
+        type: string
+    secrets:
+      APP_ID:
+        description: GitHub App id. Optional; GITHUB_TOKEN can upload release assets.
+        required: false
+      APP_PRIVATE_KEY:
+        description: Private key for the above App
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  artifact:
+    name: build + upload release artifacts
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: read
+    env:
+      APP_ID: ${{ secrets.APP_ID }}
+      VERSION: ${{ inputs.version }}
+    steps:
+      - name: Checkout the released tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.version }}
+          persist-credentials: false
+
+      - name: Set up toolchains
+        uses: ./.github/actions/setup
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          lint-tools: 'false'   # this job generates artefacts; it never lints
+
+      - name: Generate release artifacts
+        run: task artifact
+
+      - name: Generate a GitHub App token
+        id: app-token
+        if: ${{ env.APP_ID != '' }}
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          # Scoped to what this job does with it (release asset upload, plus the
+          # verify-images registry pull); zizmor github-app.
+          permission-contents: write
+          permission-packages: read
+
+      - name: Log in to GHCR
+        if: ${{ inputs.verify-images != '' }}
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ steps.app-token.outputs.token && 'x-access-token' || github.actor }}
+          password: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+
+      - name: Verify every pinned image exists
+        if: ${{ inputs.verify-images != '' }}
+        env:
+          REFS: ${{ inputs.verify-images }}
+        run: |
+          set -euo pipefail
+          fail=0
+          while IFS= read -r raw; do
+            [ -n "${raw}" ] || continue
+            ref=$(printf '%s' "${raw}" | sed "s|\${VERSION}|${VERSION}|g")
+            printf 'checking %s ... ' "${ref}"
+            if docker buildx imagetools inspect "${ref}" >/dev/null 2>&1; then
+              echo "ok"
+            else
+              echo "MISSING"; fail=1
+            fi
+          done <<< "${REFS}"
+          [ "${fail}" = "0" ] || {
+            echo "::error::refusing to publish an artifact pinning images that do not exist"
+            exit 1
+          }
+
+      - name: Upload assets to the Release
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.GITHUB_TOKEN }}
+          ASSETS: ${{ inputs.assets }}
+        run: |
+          set -euo pipefail
+          files=()
+          while IFS= read -r glob; do
+            # Trim so a whitespace-only line is treated as empty; otherwise the
+            # glob expands to an empty array and ${matched[0]} is unbound under -u.
+            glob="$(printf '%s' "${glob}" | tr -d '[:space:]')"
+            [ -n "${glob}" ] || continue
+            # shellcheck disable=SC2206  # intentional glob expansion
+            matched=( ${glob} )
+            [ "${#matched[@]}" -gt 0 ] && [ -e "${matched[0]}" ] \
+              || { echo "::error::no file matched '${glob}'"; exit 1; }
+            files+=( "${matched[@]}" )
+          done <<< "${ASSETS}"
+          [ "${#files[@]}" -gt 0 ] || { echo "::error::no assets resolved"; exit 1; }
+          printf 'uploading to %s: %s\n' "${VERSION}" "${files[*]}"
+          gh release upload "${VERSION}" "${files[@]}" --clobber
