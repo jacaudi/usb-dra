@@ -161,7 +161,7 @@ jobs:
     uses: ./.github/workflows/ci-chart.yml
     with:
       chart-path: charts
-      version: ${{ needs.release.outputs.tag_name }}
+      version: ${{ needs.release.outputs.version }}        # bare semver (0.1.0): chart version, OCI tag
       ref: ${{ needs.release.outputs.tag_name }}   # package the TAG, not this run's commit
 
   # Multi-image repos: add one sibling ci-build job per image, NOT a matrix.

@@ -293,8 +293,8 @@ helm install usb-dra oci://ghcr.io/jacaudi/charts/usb-dra -n kube-system
 kubectl apply -f deploy/claims.yaml
 ```
 
-The chart version equals the app version; add `--version <x.y.z>` to pin one. Check that the
-driver is publishing:
+The chart version equals the app version without the `v`: pin one with the bare semver, for
+example `--version 0.1.0`. Check that the driver is publishing:
 
 ```sh
 kubectl get resourceslices
@@ -375,11 +375,12 @@ Every release also publishes `release.yaml` on its GitHub Release: the chart ren
 default values, release name `usb-dra`, namespace `kube-system` and the release's image tag.
 
 ```sh
-kubectl apply -f https://github.com/jacaudi/usb-dra/releases/download/<version>/release.yaml
+kubectl apply -f https://github.com/jacaudi/usb-dra/releases/download/v0.1.0/release.yaml
 ```
 
-Use Helm for any value other than the defaults. Render it yourself with
-`task artifact VERSION=<version>`.
+The release URL and `task artifact VERSION=` take the `v`-prefixed tag (`v0.1.0`), unlike the
+chart's bare `--version 0.1.0`. Use Helm for any value other than the defaults. Render it
+yourself with `task artifact VERSION=v0.1.0`.
 
 ### Uninstall
 
@@ -390,9 +391,6 @@ seeing devices nothing serves:
 ```sh
 kubectl delete resourceslices --field-selector spec.driver=usb.jacaudi.dev
 ```
-
-The Docker build does not run tests. Run `task test` locally or in CI; it needs Helm on the
-`PATH`, because the chart tests render the chart.
 
 ## Upgrading from rtlsdr-dra
 
@@ -424,3 +422,12 @@ kubectl delete validatingadmissionpolicy,validatingadmissionpolicybinding usb-dr
 kubectl delete deviceclass rtl-sdr.usb.jacaudi.dev rak4631.usb.jacaudi.dev
 helm install usb-dra oci://ghcr.io/jacaudi/charts/usb-dra -n kube-system
 ```
+
+The same delete list applies to an install made from `release.yaml`. Those objects carry
+`app.kubernetes.io/managed-by: Helm` but no `meta.helm.sh/release-*` annotations, so
+`helm install` refuses to adopt them.
+
+## Development
+
+The Docker build does not run tests. Run `task test` locally or in CI; it needs Helm on the
+`PATH`, because the chart tests render the chart.

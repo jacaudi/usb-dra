@@ -341,6 +341,7 @@ func TestChartSchemaRejects(t *testing.T) {
 		"image.pullPolicy=Sometimes",
 		"driver.cdiRoot=/a: b",
 		"driver.cdiRoot=/run/cdi #x",
+		"driver.rescanInterval=0s",
 	} {
 		t.Run(set, func(t *testing.T) {
 			if _, err := renderChart(t, "usb-dra", "kube-system", "--set", set); err == nil {
