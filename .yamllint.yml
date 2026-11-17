@@ -27,6 +27,8 @@ ignore: |
   vendor/
   charts/templates/
   charts/charts/
+  # Rendered by `task artifact` (gitignored); generated output, not authored YAML.
+  release.yaml
   # Helm chart templates are Go templates, not YAML — `{{- if }}` is a hard
   # syntax error to yamllint. `helm lint` + `helm template` cover them instead.
   templates/

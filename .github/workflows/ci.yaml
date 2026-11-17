@@ -78,10 +78,10 @@ jobs:
     uses: ./.github/workflows/ci-test.yml
 
   # Local modification: only `release` gets the App secrets. Every registry job
-  # (build, smoke, release-image, release-smoke) uses GITHUB_TOKEN, because GHCR
-  # refuses App installation tokens for packages owned by a personal account
-  # ("installation not allowed to Write organization package"). Same as
-  # jacaudi/nextdns-operator.
+  # (build, smoke, release-image, release-smoke, release-chart, release-artifact)
+  # uses GITHUB_TOKEN, because GHCR refuses App installation tokens for packages
+  # owned by a personal account ("installation not allowed to Write organization
+  # package"). Same as jacaudi/nextdns-operator.
   build:
     needs: [context, test]
     if: ${{ needs.context.outputs.build == 'true' }}
