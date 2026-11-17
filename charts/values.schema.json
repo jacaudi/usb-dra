@@ -48,6 +48,24 @@
         "cdiRoot": { "description": "A clean absolute path: it is interpolated into the DaemonSet args and a hostPath, which must agree.", "type": "string", "pattern": "^/[A-Za-z0-9._/-]*$" }
       }
     },
+    "deviceClasses": {
+      "description": "Key -> DeviceClass \"<key>.usb.jacaudi.dev\". The key must be a DNS label. Hex IDs are four lowercase hex digits and must be quoted in YAML: an unquoted 1e03 or 0403 is a number, which is rejected rather than rendered into a wrong selector. null removes a default class.",
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
+      "additionalProperties": {
+        "type": ["object", "null"],
+        "additionalProperties": false,
+        "required": ["vendor", "products"],
+        "properties": {
+          "vendor": { "type": "string", "pattern": "^[0-9a-f]{4}$" },
+          "products": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string", "pattern": "^[0-9a-f]{4}$" }
+          }
+        }
+      }
+    },
     "resources": {
       "type": "object",
       "additionalProperties": false,
