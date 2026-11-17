@@ -111,9 +111,12 @@ Two things make a CEL selector safe or not:
   `manufacturer`, `productName` and `interfaceClasses` only behind `identity == "serial"` (for
   `serial`) or `has(...)`.
 
-CEL has no alias for the attribute map, so selectors spell it out. The shipped examples:
+CEL has no alias for the attribute map, so selectors spell it out. The chart renders the
+DeviceClasses from its `deviceClasses` values (see [Install](#install)); the example claims are
+in `deploy/claims.yaml`. The shipped examples:
 
-Any RTL-SDR (`deploy/deviceclasses.yaml`, then `deploy/claims.yaml`):
+Any RTL-SDR (the DeviceClass is the chart's default `rtl-sdr` class; the claim template is in
+`deploy/claims.yaml`):
 
 ```yaml
 apiVersion: resource.k8s.io/v1
@@ -169,7 +172,7 @@ spec:
 ```
 
 The RAK4631 LoRa board pinned by port (it has a usable serial, but the port pin also works
-for devices that have none):
+for devices that have none). The DeviceClass is the chart's default `rak4631` class:
 
 ```yaml
 apiVersion: resource.k8s.io/v1
@@ -182,7 +185,7 @@ spec:
         expression: >-
           device.driver == "usb.jacaudi.dev" &&
           device.attributes["usb.jacaudi.dev"].vendor == "239a" &&
-          device.attributes["usb.jacaudi.dev"].product == "8029"
+          device.attributes["usb.jacaudi.dev"].product in ["8029"]
 ---
 apiVersion: resource.k8s.io/v1
 kind: ResourceClaimTemplate
@@ -204,7 +207,8 @@ spec:
 ```
 
 There is deliberately no match-all DeviceClass: it would let any namespace claim any
-published device. Add one class per device family you want to hand out.
+published device. Add one class per device family you want to hand out, through the chart's
+`deviceClasses` values.
 
 ## ttys and aliases
 
@@ -285,30 +289,114 @@ restart the pod; the kubelet's own state still drives unprepare.
 ## Install
 
 ```sh
-kubectl apply -f deploy/daemonset.yaml -f deploy/deviceclasses.yaml -f deploy/claims.yaml
+helm install usb-dra oci://ghcr.io/jacaudi/charts/usb-dra -n kube-system
+kubectl apply -f deploy/claims.yaml
 ```
 
-`deploy/claims.yaml` targets the namespace `selfhosted`; edit it to match yours.
+The chart version equals the app version; add `--version <x.y.z>` to pin one. Check that the
+driver is publishing:
+
+```sh
+kubectl get resourceslices
+kubectl get deviceclasses
+```
+
+Each node should show one `usb.jacaudi.dev` pool, empty when the node has no eligible devices.
+
+`deploy/claims.yaml` is an example: it targets the namespace `selfhosted`, so edit it to match
+yours. It is not part of the chart.
 
 Do not also expose these devices through generic-device-plugin: both would allocate the same
 board.
 
-Requires Kubernetes 1.34 or later (`resource.k8s.io/v1`) with DRA enabled on the kubelet. The
-DaemonSet runs as root and privileged on every node: the plugin socket and CDI directory are
-root-owned on the host. If a node's containerd uses a different `cdi_spec_dirs`, set
-`--cdi-root` and the DaemonSet's CDI mount to match.
+Requires Kubernetes 1.34 or later (`resource.k8s.io/v1`) with DRA enabled on the kubelet.
 
-RBAC cannot scope ResourceSlice writes by node, so `deploy/daemonset.yaml` also ships a
-ValidatingAdmissionPolicy: the driver's service account may write only its own node's
-`usb.jacaudi.dev` slices. It reads the node from the pod-bound service account token, which
-Kubernetes 1.34 includes by default. If you rename the service account or its namespace,
-update the policy's match condition to match.
+- **Install into `kube-system`.** The DaemonSet runs as root and privileged on every node: the
+  plugin socket and CDI directory are root-owned on the host. A namespace that enforces the
+  baseline or restricted Pod Security level (Talos does outside `kube-system`) rejects the pods
+  while `helm install` still reports success.
+- **One release per cluster.** The driver name, the plugin socket on each node and the
+  DeviceClass names are cluster-wide singletons.
+- **Admission policy.** RBAC cannot scope ResourceSlice writes by node, so the chart also
+  creates a ValidatingAdmissionPolicy: the driver's service account may write only its own
+  node's `usb.jacaudi.dev` slices. It reads the node from the pod-bound service account token,
+  which Kubernetes 1.34 includes by default. The policy is built from the release name and
+  namespace, the same source as the service account, so they cannot drift apart.
 
-The Docker build does not run tests. Run `task test` locally or in CI.
+### Values
+
+| Value | Default | Meaning |
+| --- | --- | --- |
+| `image.repository` | `ghcr.io/jacaudi/usb-dra` | Image repository. |
+| `image.tag` | `""` | Used verbatim. Empty renders `v` plus the chart's `appVersion`. |
+| `image.pullPolicy` | `IfNotPresent` | `Always`, `IfNotPresent` or `Never`. |
+| `driver.excludeClasses` | `03,08,e0` | `--exclude-classes`, see [What it publishes](#what-it-publishes). |
+| `driver.include` | `[]` | One `--include` per entry, each `vid:pid` or `vid:pid:serial`. |
+| `driver.rescanInterval` | `30s` | `--rescan-interval`, a Go duration. |
+| `driver.verbosity` | `2` | `-v`, 0 to 10. |
+| `driver.cdiRoot` | `/var/run/cdi` | `--cdi-root` and the host mount move together; change it when a node's containerd uses a different `cdi_spec_dirs`. |
+| `deviceClasses` | `rtl-sdr`, `rak4631` | Map of DeviceClasses, see below. |
+| `resources` | 10m CPU / 32Mi request, 128Mi memory limit | Container resources. |
+| `nodeSelector` | `{}` | Restrict the DaemonSet to some nodes. |
+| `tolerations` | `[{operator: Exists}]` | Every node by default: an empty pool means "healthy, no devices". |
+| `priorityClassName` | `system-node-critical` | Pod priority class. |
+
+The chart builds the DaemonSet from fixed templates and reads only the values above, so a
+values edit cannot drop the things the driver cannot run without: root, `privileged`, the host
+mounts, the RBAC, the driver name `usb.jacaudi.dev`. Object names are the release name. The
+values schema rejects unknown keys, name overrides and malformed IDs at render time instead of
+ignoring them.
+
+### Adding a DeviceClass
+
+A device type is a values entry, not a chart release. The key becomes the class name
+`<key>.usb.jacaudi.dev`; `vendor` and each product are four lowercase hex digits and **must be
+quoted**, because an unquoted `1e03` or `0403` is a YAML number and the schema rejects it.
+
+```yaml
+# my-values.yaml
+deviceClasses:
+  ch340: # DeviceClass ch340.usb.jacaudi.dev
+    vendor: "1a86"
+    products: ["7523"]
+  rak4631: null # drop a default class
+```
+
+```sh
+helm upgrade --install usb-dra oci://ghcr.io/jacaudi/charts/usb-dra -n kube-system -f my-values.yaml
+```
+
+Each class selects this driver's devices of that vendor and one of those products, with the
+`device.driver` guard every shipped selector needs.
+
+### Without Helm
+
+Every release also publishes `release.yaml` on its GitHub Release: the chart rendered with
+default values, release name `usb-dra`, namespace `kube-system` and the release's image tag.
+
+```sh
+kubectl apply -f https://github.com/jacaudi/usb-dra/releases/download/<version>/release.yaml
+```
+
+Use Helm for any value other than the defaults. Render it yourself with
+`task artifact VERSION=<version>`.
+
+### Uninstall
+
+`helm uninstall usb-dra -n kube-system` removes the DaemonSet, RBAC, admission policy and
+DeviceClasses. The driver's ResourceSlices outlive it; delete them so the scheduler stops
+seeing devices nothing serves:
+
+```sh
+kubectl delete resourceslices --field-selector spec.driver=usb.jacaudi.dev
+```
+
+The Docker build does not run tests. Run `task test` locally or in CI; it needs Helm on the
+`PATH`, because the chart tests render the chart.
 
 ## Upgrading from rtlsdr-dra
 
-Applying the new manifests does not remove the old driver's objects. Delete them by hand:
+Installing the chart does not remove the old driver's objects. Delete them by hand:
 
 - the `rtlsdr-dra` DaemonSet, ServiceAccount, ClusterRole and ClusterRoleBinding;
 - the `sdr.jacaudi.dev` ResourceSlices;
@@ -320,3 +408,19 @@ Claims written against `sdr.jacaudi.dev` attributes or the old class must be rew
 
 The injected environment variables were renamed: `RTLSDR_SERIAL` and `RTLSDR_DEVNODE` are now
 `USB_SERIAL` and `USB_DEVNODE`; update any container that reads them.
+
+## Upgrading from the manifests to the chart
+
+Earlier builds installed from hand-written DaemonSet and DeviceClass manifests under
+`deploy/`. The chart uses the same object names but different pod selector labels, and a
+DaemonSet selector cannot be changed in place, so **delete the old DaemonSet first**. Helm
+also refuses to take over objects it did not create, so delete the rest of what those
+manifests created too, then install:
+
+```sh
+kubectl -n kube-system delete daemonset,serviceaccount usb-dra
+kubectl delete clusterrole,clusterrolebinding usb-dra
+kubectl delete validatingadmissionpolicy,validatingadmissionpolicybinding usb-dra-resourceslices
+kubectl delete deviceclass rtl-sdr.usb.jacaudi.dev rak4631.usb.jacaudi.dev
+helm install usb-dra oci://ghcr.io/jacaudi/charts/usb-dra -n kube-system
+```
