@@ -21,8 +21,11 @@ by port. Serial devices also get their ttys injected, with a stable alias path.
 
 ## Outcome
 
-The code is built and unit-tested. Not yet exercised: real hardware, multi-node scheduling,
-and a deploy into the cluster (a home-ops follow-up).
+The code is built and unit-tested. The Helm chart is verified on a two-node kind v1.34.0:
+DaemonSet ready on both nodes, an empty pool published per node, both DeviceClasses present, the
+admission policy denying a cross-node slice write from the worker's pod-bound token, the rendered
+`release.yaml` accepted by a server dry run, and a clean `helm uninstall`. Not yet exercised: real
+hardware, multi-node scheduling, and a deploy into the cluster (a home-ops follow-up).
 
 ## Invariants — do not break these
 
@@ -56,9 +59,10 @@ makes one of these tests fail, the change is wrong, not the test.
 9. **One unreadable device never fails the scan or another device's prepare.** Tests:
    `TestScanSkipsUnreadableInterface`,
    `TestPrepareOneUnreadableDeviceDoesNotAffectOtherClaim`.
-10. **Shipped selectors guard `device.driver` and optional attributes.** A reference to a
-    missing attribute aborts allocation. Tests: `TestClassSelectorsNeverError`,
-    `TestSelectorsSerialPinSkipsDuplicate`.
+10. **Shipped selectors guard `device.driver` and optional attributes.** The shipped selectors
+    are the DeviceClasses the chart renders (`charts/templates/deviceclasses.yaml`) and the
+    claims in `deploy/claims.yaml`. A reference to a missing attribute aborts allocation.
+    Tests: `TestClassSelectorsNeverError`, `TestSelectorsSerialPinSkipsDuplicate`.
 11. **Prepared state survives a driver restart:** the checkpoint is written atomically and
     loaded before registration. Tests: `TestCheckpointSurvivesDriverRestart`,
     `TestSaveFailureLeavesStateUnchanged`.
@@ -69,17 +73,28 @@ makes one of these tests fail, the change is wrong, not the test.
 
 ## Deployment gotchas
 
-Both were found only by running the driver on a live cluster; neither shows up in unit
-tests or `kubectl apply --dry-run=server`.
+The first two were found only by running the driver on a live cluster; neither shows up in
+unit tests or `kubectl apply --dry-run=server`. The chart now fixes both in its templates,
+with a test each.
 
 - **The image must NOT use a `:nonroot` base.** A kubelet plugin creates its socket
   under `/var/lib/kubelet/plugins/<driver>` and writes CDI specs to `/var/run/cdi`,
   both root-owned on the host. `privileged: true` does *not* change the UID, so a
-  nonroot image dies at startup with `mkdir ...: permission denied`. The DaemonSet also
-  sets `runAsUser: 0` explicitly.
+  nonroot image dies at startup with `mkdir ...: permission denied`. The chart's DaemonSet
+  (`charts/templates/_values-controllers.tpl`) sets `runAsUser: 0` and `privileged: true`
+  in the template, not in values. Test: `TestChartDaemonSetFixedFields`.
 - **RBAC needs `resourceclaims` read.** The kubeletplugin helper fetches the
   ResourceClaim itself before calling `NodePrepareResources`. Without it, every pod
   hangs in `ContainerCreating` with a forbidden error, and the driver logs look healthy.
+  The rules are in `charts/templates/_values-rbac.tpl`. Test: `TestChartRBAC`.
+- **Install into `kube-system`.** The pods are privileged and root. A namespace enforcing
+  baseline Pod Security (Talos does outside `kube-system`) rejects them while `helm install`
+  reports success; `charts/templates/NOTES.txt` warns when the namespace differs.
+- **The admission policy must match the service account the chart creates.** RBAC cannot scope
+  ResourceSlice writes by node, so `charts/templates/validatingadmissionpolicy.yaml` does. Its
+  username and the service account, ClusterRole, binding and DaemonSet names all come from the
+  one `usb-dra.name` helper (the release name); the schema rejects every name override.
+  Test: `TestSlicePolicyScopesDriverAccount` (a release-name by namespace matrix).
 
 ## Layout
 
@@ -92,8 +107,11 @@ tests or `kubectl apply --dry-run=server`.
 - `internal/usb/usb.go` — `Discover` and the `Device` type.
 - `internal/usb/slice.go` — device to ResourceSlice attributes, the 128-device cap, and the
   always-present pool.
-- `internal/usb/selectors_test.go` — compiles every selector in `deploy/` with the DRA CEL
-  package and evaluates them the way the allocator does.
+- `internal/usb/selectors_test.go` — compiles every selector the chart renders and every
+  claim in `deploy/claims.yaml` with the DRA CEL package and evaluates them the way the
+  allocator does.
+- `internal/usb/chart*_test.go` — run `helm template` (fails, never skips, when Helm is
+  missing) and assert the DaemonSet, RBAC, policy, DeviceClasses and schema rejections.
 - `internal/usb/testdata/sysfs/` — captures from talos-01-cp and talos-05-wrk; keep them as
   regression fixtures.
 - `cmd/usb-dra-kubeletplugin/main.go` — flags, startup, rescan loop.
@@ -101,7 +119,13 @@ tests or `kubectl apply --dry-run=server`.
   and unprepare.
 - `cmd/usb-dra-kubeletplugin/cdi.go` — CDI spec generation: USB node, ttys, aliases, env.
 - `cmd/usb-dra-kubeletplugin/checkpoint.go` — versioned atomic prepared-claim checkpoint.
-- `deploy/` — DaemonSet + RBAC, example DeviceClasses, example claim templates.
+- `charts/` — the Helm chart (`usb-dra`, on bjw-s `common` 5.3.0): the DaemonSet, ServiceAccount
+  and RBAC through `common` from the `_values-*.tpl` helpers, the node-scoped
+  ValidatingAdmissionPolicy, and the DeviceClasses rendered from the `deviceClasses` values.
+  `values.schema.json` rejects unknown keys and malformed hex IDs. The chart version equals the
+  app version (one release-please package). `charts/charts/` is the vendored dependency and is
+  gitignored.
+- `deploy/claims.yaml` — example claim templates; not part of the chart.
 
 Device names are `usb-<vid>-<pid>-<id>` and must remain valid DNS labels of at most 63
 characters.
@@ -109,11 +133,14 @@ characters.
 ## Commands
 
 ```sh
-task test                      # go test
-task ci                        # everything CI runs
+task test                      # go test ./...: 90 tests, needs helm on PATH (the chart tests render it)
+task ci                        # everything CI runs, helm lint + template included
 go vet ./...
+helm dependency build charts   # vendors common into charts/charts/ (honours Chart.lock)
+helm lint charts
+task artifact VERSION=v0.1.0   # renders release.yaml, the release manifest (gitignored)
+kubectl apply --dry-run=server -f release.yaml   # schema + CEL validation of the rendered chart
 docker build -t usb-dra .      # does NOT run tests: .dockerignore strips testdata and *_test.go
-kubectl apply --dry-run=server -f deploy/   # schema + CEL validation
 ```
 
 `k8s.io/*` stays v0.34.x while the cluster runs 1.35; bumping is a separate change.

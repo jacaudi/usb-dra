@@ -1,0 +1,18 @@
+usb-dra {{ .Chart.AppVersion }} is installed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+{{- if ne .Release.Namespace "kube-system" }}
+
+WARNING: the driver pods are privileged and run as root. A namespace that enforces the
+baseline or restricted Pod Security level (Talos does outside kube-system) rejects them
+while "helm install" still reports success. Install into kube-system, or check:
+
+  kubectl -n {{ .Release.Namespace }} get daemonset {{ include "usb-dra.name" . }}
+{{- end }}
+
+Run one release per cluster. The driver name usb.jacaudi.dev, the plugin socket on each node and
+the DeviceClass names are cluster-wide singletons; a second release would collide with the first.
+
+Check that the driver is publishing. Each node should show one usb.jacaudi.dev pool, which is
+empty when the node has no eligible USB devices:
+
+  kubectl get resourceslices
+  kubectl get deviceclasses
