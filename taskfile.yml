@@ -76,8 +76,9 @@ tasks:
         echo "ok: binary starts"
 
   # The release manifest uploaded to the GitHub Release by ci-artifact.yml, for
-  # installs without Helm. Rendered from the chart with the release tag as the image
-  # tag. Runs locally: task artifact VERSION=v0.1.0
+  # installs without Helm. Rendered from the chart with examples/values.yaml (the chart
+  # creates no DeviceClass on its own) and the release tag as the image tag. Runs
+  # locally: task artifact VERSION=v0.1.0
   artifact:
     desc: Render the chart into release.yaml (the release manifest)
     requires:
@@ -91,6 +92,6 @@ tasks:
         set -eu
         {
           echo "# usb-dra ${VERSION} — install into kube-system"
-          helm template usb-dra charts -n kube-system --set image.tag="${VERSION}"
+          helm template usb-dra charts -n kube-system -f examples/values.yaml --set image.tag="${VERSION}"
         } > release.yaml
         echo "wrote release.yaml (${VERSION})"

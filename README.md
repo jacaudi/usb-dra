@@ -112,11 +112,12 @@ Two things make a CEL selector safe or not:
   `serial`) or `has(...)`.
 
 CEL has no alias for the attribute map, so selectors spell it out. The chart renders the
-DeviceClasses from its `deviceClasses` values (see [Install](#install)); the example claims are
-in `deploy/claims.yaml`. The shipped examples:
+DeviceClasses from its `deviceClasses` values; the example deployment in
+`examples/values.yaml` defines the two used below (see [Install](#install)), and the example
+claims are in `examples/claims.yaml`. The shipped examples:
 
-Any RTL-SDR (the DeviceClass is the chart's default `rtl-sdr` class; the claim template is in
-`deploy/claims.yaml`):
+Any RTL-SDR (the DeviceClass is the `rtl-sdr` class from `examples/values.yaml`; the claim
+template is in `examples/claims.yaml`):
 
 ```yaml
 apiVersion: resource.k8s.io/v1
@@ -172,7 +173,8 @@ spec:
 ```
 
 The RAK4631 LoRa board pinned by port (it has a usable serial, but the port pin also works
-for devices that have none). The DeviceClass is the chart's default `rak4631` class:
+for devices that have none). The DeviceClass is the `rak4631` class from
+`examples/values.yaml`:
 
 ```yaml
 apiVersion: resource.k8s.io/v1
@@ -207,8 +209,8 @@ spec:
 ```
 
 There is deliberately no match-all DeviceClass: it would let any namespace claim any
-published device. Add one class per device family you want to hand out, through the chart's
-`deviceClasses` values.
+published device. The chart creates no DeviceClass on its own; add one class per device family
+you want to hand out, through the chart's `deviceClasses` values.
 
 ## ttys and aliases
 
@@ -289,9 +291,15 @@ restart the pod; the kubelet's own state still drives unprepare.
 ## Install
 
 ```sh
-helm install usb-dra oci://ghcr.io/jacaudi/charts/usb-dra -n kube-system
-kubectl apply -f deploy/claims.yaml
+helm install usb-dra oci://ghcr.io/jacaudi/charts/usb-dra -n kube-system -f examples/values.yaml
+kubectl apply -f examples/claims.yaml
 ```
+
+Run it from a checkout of this repository, or copy `examples/values.yaml` and point `-f` at the
+copy. A plain `helm install` without `-f` deploys the driver but **creates no DeviceClasses**: the
+chart does not decide which devices to hand out, and a claim cannot select a device until a
+class exists. `examples/values.yaml` defines `rtl-sdr` and `rak4631`; see
+[Adding a DeviceClass](#adding-a-deviceclass).
 
 The chart version equals the app version without the `v`: pin one with the bare semver, for
 example `--version 0.1.0`. Check that the driver is publishing:
@@ -303,7 +311,7 @@ kubectl get deviceclasses
 
 Each node should show one `usb.jacaudi.dev` pool, empty when the node has no eligible devices.
 
-`deploy/claims.yaml` is an example: it targets the namespace `selfhosted`, so edit it to match
+`examples/claims.yaml` is an example: it targets the namespace `selfhosted`, so edit it to match
 yours. It is not part of the chart.
 
 Do not also expose these devices through generic-device-plugin: both would allocate the same
@@ -325,20 +333,24 @@ Requires Kubernetes 1.34 or later (`resource.k8s.io/v1`) with DRA enabled on the
 
 ### Values
 
+The chart's own `values.yaml` is empty (`{}`): every default below lives in the templates, so
+`examples/values.yaml` lists only what a deployment chooses. A value that is set is used as
+given, even when empty or zero.
+
 | Value | Default | Meaning |
 | --- | --- | --- |
 | `image.repository` | `ghcr.io/jacaudi/usb-dra` | Image repository. |
-| `image.tag` | `""` | Used verbatim. Empty renders `v` plus the chart's `appVersion`. |
+| `image.tag` | `v` plus the chart's `appVersion` | Used verbatim when set. |
 | `image.pullPolicy` | `IfNotPresent` | `Always`, `IfNotPresent` or `Never`. |
-| `driver.excludeClasses` | `03,08,e0` | `--exclude-classes`, see [What it publishes](#what-it-publishes). |
-| `driver.include` | `[]` | One `--include` per entry, each `vid:pid` or `vid:pid:serial`. |
-| `driver.rescanInterval` | `30s` | `--rescan-interval`, a Go duration. |
+| `driver.excludeClasses` | not passed; the binary's `03,08,e0` applies | `--exclude-classes`, see [What it publishes](#what-it-publishes). |
+| `driver.include` | none | One `--include` per entry, each `vid:pid` or `vid:pid:serial`. |
+| `driver.rescanInterval` | not passed; the binary's `30s` applies | `--rescan-interval`, a Go duration. |
 | `driver.verbosity` | `2` | `-v`, 0 to 10. |
 | `driver.cdiRoot` | `/var/run/cdi` | `--cdi-root` and the host mount move together; change it when a node's containerd uses a different `cdi_spec_dirs`. |
-| `deviceClasses` | `rtl-sdr`, `rak4631` | Map of DeviceClasses, see below. |
-| `resources` | 10m CPU / 32Mi request, 128Mi memory limit | Container resources. |
-| `nodeSelector` | `{}` | Restrict the DaemonSet to some nodes. |
-| `tolerations` | `[{operator: Exists}]` | Every node by default: an empty pool means "healthy, no devices". |
+| `deviceClasses` | none: no DeviceClass is created | Map of DeviceClasses, see below. |
+| `resources` | 10m CPU / 32Mi memory request, 128Mi memory limit | Container resources. A set value replaces the whole default. |
+| `nodeSelector` | none | Restrict the DaemonSet to some nodes. |
+| `tolerations` | `- operator: Exists` | Every node by default: an empty pool means "healthy, no devices". A set value replaces it. |
 | `priorityClassName` | `system-node-critical` | Pod priority class. |
 
 The chart builds the DaemonSet from fixed templates and reads only the values above, so a
@@ -349,21 +361,24 @@ ignoring them.
 
 ### Adding a DeviceClass
 
-A device type is a values entry, not a chart release. The key becomes the class name
-`<key>.usb.jacaudi.dev`; `vendor` and each product are four lowercase hex digits and **must be
-quoted**, because an unquoted `1e03` or `0403` is a YAML number and the schema rejects it.
+A device type is a values entry, not a chart release. Start from `examples/values.yaml`, which
+defines `rtl-sdr` and `rak4631`. The key becomes the class name `<key>.usb.jacaudi.dev`;
+`vendor` and each product are four lowercase hex digits and **must be quoted**, because an
+unquoted `1e03` or `0403` is a YAML number and the schema rejects it.
 
 ```yaml
-# my-values.yaml
+# my-values.yaml, layered over the example: -f examples/values.yaml -f my-values.yaml
 deviceClasses:
   ch340: # DeviceClass ch340.usb.jacaudi.dev
     vendor: "1a86"
-    products: ["7523"]
-  rak4631: null # drop a default class
+    products:
+      - "7523"
+  rak4631: null # drop a class the example defines
 ```
 
 ```sh
-helm upgrade --install usb-dra oci://ghcr.io/jacaudi/charts/usb-dra -n kube-system -f my-values.yaml
+helm upgrade --install usb-dra oci://ghcr.io/jacaudi/charts/usb-dra -n kube-system \
+  -f examples/values.yaml -f my-values.yaml
 ```
 
 Each class selects this driver's devices of that vendor and one of those products, with the
@@ -372,14 +387,15 @@ Each class selects this driver's devices of that vendor and one of those product
 ### Without Helm
 
 Every release also publishes `release.yaml` on its GitHub Release: the chart rendered with
-default values, release name `usb-dra`, namespace `kube-system` and the release's image tag.
+`examples/values.yaml` (so it includes the `rtl-sdr` and `rak4631` DeviceClasses), release name
+`usb-dra`, namespace `kube-system` and the release's image tag.
 
 ```sh
 kubectl apply -f https://github.com/jacaudi/usb-dra/releases/download/v0.1.0/release.yaml
 ```
 
 The release URL and `task artifact VERSION=` take the `v`-prefixed tag (`v0.1.0`), unlike the
-chart's bare `--version 0.1.0`. Use Helm for any value other than the defaults. Render it
+chart's bare `--version 0.1.0`. Use Helm for any value other than the example's. Render it
 yourself with `task artifact VERSION=v0.1.0`.
 
 ### Uninstall
@@ -420,7 +436,7 @@ kubectl -n kube-system delete daemonset,serviceaccount usb-dra
 kubectl delete clusterrole,clusterrolebinding usb-dra
 kubectl delete validatingadmissionpolicy,validatingadmissionpolicybinding usb-dra-resourceslices
 kubectl delete deviceclass rtl-sdr.usb.jacaudi.dev rak4631.usb.jacaudi.dev
-helm install usb-dra oci://ghcr.io/jacaudi/charts/usb-dra -n kube-system
+helm install usb-dra oci://ghcr.io/jacaudi/charts/usb-dra -n kube-system -f examples/values.yaml
 ```
 
 The same delete list applies to an install made from `release.yaml`. Those objects carry

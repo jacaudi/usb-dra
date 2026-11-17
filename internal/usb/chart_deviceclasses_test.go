@@ -4,6 +4,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -51,30 +52,39 @@ func TestChartDeviceClasses(t *testing.T) {
 	)
 	tests := []struct {
 		name   string
-		values string // "" renders the chart defaults
+		values string // layered over examples/values.yaml; "" renders the example alone
 		want   map[string]string
 	}{
 		{
-			name: "defaults",
+			name: "example values",
 			want: map[string]string{"rtl-sdr.usb.jacaudi.dev": rtl, "rak4631.usb.jacaudi.dev": rak},
 		},
 		{
-			name:   "null removes a default, a new key adds a class",
+			name:   "null removes an example class, a new key adds a class",
 			values: "deviceClasses: {rak4631: null, gps: {vendor: \"1546\", products: [\"01a8\"]}}\n",
 			want:   map[string]string{"rtl-sdr.usb.jacaudi.dev": rtl, "gps.usb.jacaudi.dev": gps},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var extra []string
+			extra := []string{"-f", exampleValues}
 			if tt.values != "" {
-				extra = valuesFile(t, tt.values)
+				extra = append(extra, valuesFile(t, tt.values)...)
 			}
 			got := renderedDeviceClasses(t, extra...)
 			if !maps.Equal(got, tt.want) {
 				t.Errorf("DeviceClasses = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// TestExampleValuesRender guards the shipped example deployment: it passes the schema and defines exactly the rtl-sdr and rak4631 classes the README and examples/claims.yaml refer to.
+func TestExampleValuesRender(t *testing.T) {
+	got := slices.Sorted(maps.Keys(renderedDeviceClasses(t, "-f", exampleValues)))
+	want := []string{"rak4631.usb.jacaudi.dev", "rtl-sdr.usb.jacaudi.dev"}
+	if !slices.Equal(got, want) {
+		t.Errorf("examples/values.yaml DeviceClasses = %v, want %v", got, want)
 	}
 }
 

@@ -1,6 +1,6 @@
 {{/*
 Host mounts. A hostPath item mounts at its own path, so the cdi volume and mount move
-together with driver.cdiRoot, which is also passed as --cdi-root.
+together with the "usb-dra.cdiRoot" helper, which is also passed as --cdi-root.
 */}}
 {{- define "usb-dra.values.persistence" -}}
 persistence:
@@ -14,7 +14,7 @@ persistence:
     hostPathType: Directory
   cdi:
     type: hostPath
-    hostPath: {{ .Values.driver.cdiRoot | quote }}
+    hostPath: {{ include "usb-dra.cdiRoot" . | quote }}
     hostPathType: DirectoryOrCreate
   sys:
     type: hostPath

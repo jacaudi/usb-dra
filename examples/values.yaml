@@ -1,0 +1,55 @@
+# Example deployment values for the usb-dra chart:
+#
+#   helm install usb-dra oci://ghcr.io/jacaudi/charts/usb-dra -n kube-system -f examples/values.yaml
+#
+# The chart's own values.yaml is empty: every default lives in the templates, so this file
+# lists only what a deployment chooses. Commented lines show the effective default. See
+# values.schema.json for every accepted key.
+
+# image:
+#   repository: ghcr.io/jacaudi/usb-dra
+#   # Default: "v" + the chart's appVersion. Set it to pin another image.
+#   tag: v0.1.0
+#   pullPolicy: IfNotPresent
+
+# The binary's own defaults apply unless a value is set; shown with their effective values.
+# driver:
+#   excludeClasses: "03,08,e0"
+#   rescanInterval: 30s
+#   # None by default. Devices published despite excludeClasses, each "vid:pid" or
+#   # "vid:pid:serial":
+#   include:
+#     - "0bda:2838"
+#   verbosity: 2
+#   # The --cdi-root flag and the host mount move together:
+#   cdiRoot: /var/run/cdi
+
+# A plain install creates no DeviceClass. Each key becomes the class
+# "<key>.usb.jacaudi.dev"; vendor and products are four lowercase hex digits and must be
+# quoted, because an unquoted 1e03 or 0403 is a YAML number.
+deviceClasses:
+  rtl-sdr:
+    vendor: "0bda"
+    products:
+      - "2838"
+      - "2832"
+  rak4631:
+    vendor: "239a"
+    products:
+      - "8029"
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    memory: 128Mi
+
+# Every node, so an empty pool means "healthy, no devices".
+tolerations:
+  - operator: Exists
+
+# nodeSelector:
+#   kubernetes.io/os: linux
+
+# priorityClassName: system-node-critical

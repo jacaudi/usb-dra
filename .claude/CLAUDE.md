@@ -60,8 +60,8 @@ makes one of these tests fail, the change is wrong, not the test.
    `TestScanSkipsUnreadableInterface`,
    `TestPrepareOneUnreadableDeviceDoesNotAffectOtherClaim`.
 10. **Shipped selectors guard `device.driver` and optional attributes.** The shipped selectors
-    are the DeviceClasses the chart renders (`charts/templates/deviceclasses.yaml`) and the
-    claims in `deploy/claims.yaml`. A reference to a missing attribute aborts allocation.
+    are the DeviceClasses the chart renders from `examples/values.yaml`
+    (`charts/templates/deviceclasses.yaml`) and the claims in `examples/claims.yaml`. A reference to a missing attribute aborts allocation.
     Tests: `TestClassSelectorsNeverError`, `TestSelectorsSerialPinSkipsDuplicate`.
 11. **Prepared state survives a driver restart:** the checkpoint is written atomically and
     loaded before registration. Tests: `TestCheckpointSurvivesDriverRestart`,
@@ -107,11 +107,13 @@ with a test each.
 - `internal/usb/usb.go` — `Discover` and the `Device` type.
 - `internal/usb/slice.go` — device to ResourceSlice attributes, the 128-device cap, and the
   always-present pool.
-- `internal/usb/selectors_test.go` — compiles every selector the chart renders and every
-  claim in `deploy/claims.yaml` with the DRA CEL package and evaluates them the way the
-  allocator does.
+- `internal/usb/selectors_test.go` — compiles every selector the chart renders from
+  `examples/values.yaml` and every claim in `examples/claims.yaml` with the DRA CEL package and
+  evaluates them the way the allocator does.
 - `internal/usb/chart*_test.go` — run `helm template` (fails, never skips, when Helm is
   missing) and assert the DaemonSet, RBAC, policy, DeviceClasses and schema rejections.
+  `chart_style_test.go` fails on any flow-style YAML (`{...}`, `[...]`) under `charts/` and
+  `examples/`: write block style.
 - `internal/usb/testdata/sysfs/` — captures from talos-01-cp and talos-05-wrk; keep them as
   regression fixtures.
 - `cmd/usb-dra-kubeletplugin/main.go` — flags, startup, rescan loop.
@@ -122,10 +124,14 @@ with a test each.
 - `charts/` — the Helm chart (`usb-dra`, on bjw-s `common` 5.3.0): the DaemonSet, ServiceAccount
   and RBAC through `common` from the `_values-*.tpl` helpers, the node-scoped
   ValidatingAdmissionPolicy, and the DeviceClasses rendered from the `deviceClasses` values.
+  `charts/values.yaml` is `{}`: every default lives in the templates (hasKey/dig, so a set
+  empty or zero value is honoured), and a plain install creates no DeviceClass.
   `values.schema.json` rejects unknown keys and malformed hex IDs. The chart version equals the
   app version (one release-please package). `charts/charts/` is the vendored dependency and is
   gitignored.
-- `deploy/claims.yaml` — example claim templates; not part of the chart.
+- `examples/values.yaml` — the example deployment: the `rtl-sdr` and `rak4631` DeviceClasses,
+  with the driver defaults shown commented. `task artifact` renders `release.yaml` with it.
+- `examples/claims.yaml` — example claim templates; not part of the chart.
 
 Device names are `usb-<vid>-<pid>-<id>` and must remain valid DNS labels of at most 63
 characters.
@@ -133,12 +139,13 @@ characters.
 ## Commands
 
 ```sh
-task test                      # go test ./...: 90 tests, needs helm on PATH (the chart tests render it)
+task test                      # go test ./...: 96 tests, needs helm on PATH (the chart tests render it)
 task ci                        # everything CI runs, helm lint + template included
 go vet ./...
 helm dependency build charts   # vendors common into charts/charts/ (honours Chart.lock)
 helm lint charts
-task artifact VERSION=v0.1.0   # renders release.yaml, the release manifest (gitignored)
+helm lint charts -f examples/values.yaml
+task artifact VERSION=v0.1.0   # renders release.yaml from examples/values.yaml (gitignored)
 kubectl apply --dry-run=server -f release.yaml   # schema + CEL validation of the rendered chart
 docker build -t usb-dra .      # does NOT run tests: .dockerignore strips testdata and *_test.go
 ```
