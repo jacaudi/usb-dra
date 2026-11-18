@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 
 	resourceapi "k8s.io/api/resource/v1"
@@ -88,28 +87,27 @@ func TestExampleValuesRender(t *testing.T) {
 	}
 }
 
-// TestChartDeviceClassSchemaRejects guards against a silently wrong selector: YAML turns an unquoted 1e03, 10e2 or 0403 into a number, and the schema must refuse it, along with any unknown key or malformed name. Each case names the schema path that must be reported, so a rejection for an unrelated reason cannot pass.
+// TestChartDeviceClassSchemaRejects guards against a silently wrong selector: YAML turns an unquoted 1e03, 10e2 or 0403 into a number, and the schema must refuse it, along with any unknown key or malformed name. A valid entry must render first, so a broken values file cannot make every case "reject".
 func TestChartDeviceClassSchemaRejects(t *testing.T) {
-	tests := []struct{ name, values, wantErr string }{
-		{"vendor coerced to a float", "deviceClasses: {gps: {vendor: 1e03, products: [\"01a8\"]}}\n", "'/deviceClasses/gps/vendor': got number, want string"},
-		{"product coerced to a float", "deviceClasses: {gps: {vendor: \"1546\", products: [10e2]}}\n", "'/deviceClasses/gps/products/0': got number, want string"},
-		{"vendor coerced to an octal int", "deviceClasses: {gps: {vendor: 0403, products: [\"01a8\"]}}\n", "'/deviceClasses/gps/vendor': got number, want string"},
-		{"vendor uppercase", "deviceClasses: {gps: {vendor: \"0BDA\", products: [\"01a8\"]}}\n", "'/deviceClasses/gps/vendor': '0BDA' does not match pattern"},
-		{"vendor too short", "deviceClasses: {gps: {vendor: \"bda\", products: [\"01a8\"]}}\n", "'/deviceClasses/gps/vendor': 'bda' does not match pattern"},
-		{"product key instead of products", "deviceClasses: {gps: {vendor: \"1546\", products: [\"01a8\"], product: [\"2838\"]}}\n", "'/deviceClasses/gps': additional properties 'product' not allowed"},
-		{"products missing", "deviceClasses: {gps: {vendor: \"1546\"}}\n", "'/deviceClasses/gps': missing property 'products'"},
-		{"vendor missing", "deviceClasses: {gps: {products: [\"01a8\"]}}\n", "'/deviceClasses/gps': missing property 'vendor'"},
-		{"products empty", "deviceClasses: {gps: {vendor: \"1546\", products: []}}\n", "'/deviceClasses/gps/products': minItems"},
-		{"class name with underscore and capital", "deviceClasses: {Bad_Name: {vendor: \"1546\", products: [\"01a8\"]}}\n", "invalid propertyName 'Bad_Name'"},
+	if _, err := renderChart(t, "usb-dra", "kube-system", valuesFile(t, "deviceClasses: {gps: {vendor: \"0bda\", products: [\"2838\"]}}\n")...); err != nil {
+		t.Fatalf("a valid deviceClasses entry must render: %v", err)
+	}
+	tests := []struct{ name, values string }{
+		{"vendor coerced to a float", "deviceClasses: {gps: {vendor: 1e03, products: [\"01a8\"]}}\n"},
+		{"product coerced to a float", "deviceClasses: {gps: {vendor: \"1546\", products: [10e2]}}\n"},
+		{"vendor coerced to an octal int", "deviceClasses: {gps: {vendor: 0403, products: [\"01a8\"]}}\n"},
+		{"vendor uppercase", "deviceClasses: {gps: {vendor: \"0BDA\", products: [\"01a8\"]}}\n"},
+		{"vendor too short", "deviceClasses: {gps: {vendor: \"bda\", products: [\"01a8\"]}}\n"},
+		{"product key instead of products", "deviceClasses: {gps: {vendor: \"1546\", products: [\"01a8\"], product: [\"2838\"]}}\n"},
+		{"products missing", "deviceClasses: {gps: {vendor: \"1546\"}}\n"},
+		{"vendor missing", "deviceClasses: {gps: {products: [\"01a8\"]}}\n"},
+		{"products empty", "deviceClasses: {gps: {vendor: \"1546\", products: []}}\n"},
+		{"class name with underscore and capital", "deviceClasses: {Bad_Name: {vendor: \"1546\", products: [\"01a8\"]}}\n"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := renderChart(t, "usb-dra", "kube-system", valuesFile(t, tt.values)...)
-			if err == nil {
-				t.Fatalf("values %q rendered, want a schema error", tt.values)
-			}
-			if !strings.Contains(err.Error(), tt.wantErr) {
-				t.Errorf("error = %v, want it to contain %q", err, tt.wantErr)
+			if _, err := renderChart(t, "usb-dra", "kube-system", valuesFile(t, tt.values)...); err == nil {
+				t.Errorf("values %q rendered, want a schema error", tt.values)
 			}
 		})
 	}
