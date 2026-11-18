@@ -81,12 +81,12 @@ with a test each.
   under `/var/lib/kubelet/plugins/<driver>` and writes CDI specs to `/var/run/cdi`,
   both root-owned on the host. `privileged: true` does *not* change the UID, so a
   nonroot image dies at startup with `mkdir ...: permission denied`. The chart's DaemonSet
-  (`charts/templates/_values-controllers.tpl`) sets `runAsUser: 0` and `privileged: true`
+  (`charts/templates/_values.tpl`) sets `runAsUser: 0` and `privileged: true`
   in the template, not in values. Test: `TestChartDaemonSetFixedFields`.
 - **RBAC needs `resourceclaims` read.** The kubeletplugin helper fetches the
   ResourceClaim itself before calling `NodePrepareResources`. Without it, every pod
   hangs in `ContainerCreating` with a forbidden error, and the driver logs look healthy.
-  The rules are in `charts/templates/_values-rbac.tpl`. Test: `TestChartRBAC`.
+  The rules are in `charts/templates/_values.tpl`. Test: `TestChartRBAC`.
 - **Install into `kube-system`.** The pods are privileged and root. A namespace enforcing
   baseline Pod Security (Talos does outside `kube-system`) rejects them while `helm install`
   reports success; `charts/templates/NOTES.txt` warns when the namespace differs.
@@ -123,7 +123,7 @@ with a test each.
 - `cmd/usb-dra-kubeletplugin/cdi.go` — CDI spec generation: USB node, ttys, aliases, env.
 - `cmd/usb-dra-kubeletplugin/checkpoint.go` — versioned atomic prepared-claim checkpoint.
 - `charts/` — the Helm chart (`usb-dra`, on bjw-s `common` 5.3.0): the DaemonSet, ServiceAccount
-  and RBAC through `common` from the `_values-*.tpl` helpers, the node-scoped
+  and RBAC through `common` from the one `_values.tpl` helper, the node-scoped
   ValidatingAdmissionPolicy, and the DeviceClasses rendered from the `deviceClasses` values.
   `charts/values.yaml` is `{}`: every default lives in the templates (hasKey/dig, so a set
   empty or zero value is honoured), and a plain install creates no DeviceClass.
