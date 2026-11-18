@@ -64,4 +64,4 @@ config/**/*.local.yaml
 /charts/charts/
 
 # Rendered by `task artifact`; uploaded to the GitHub Release, never committed
-/release.yaml
+/install.yaml

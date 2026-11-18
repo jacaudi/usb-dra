@@ -80,7 +80,7 @@ tasks:
   # creates no DeviceClass on its own) and the release tag as the image tag. Runs
   # locally: task artifact VERSION=v0.1.0
   artifact:
-    desc: Render the chart into release.yaml (the release manifest)
+    desc: Render the chart into install.yaml (the kubectl install manifest)
     requires:
       vars: [VERSION]
     # Accepts BOTH `VERSION=… task artifact` and `task artifact VERSION=…`.
@@ -93,5 +93,5 @@ tasks:
         {
           echo "# usb-dra ${VERSION} — install into kube-system"
           helm template usb-dra charts -n kube-system -f examples/values.yaml --set image.tag="${VERSION}"
-        } > release.yaml
-        echo "wrote release.yaml (${VERSION})"
+        } > install.yaml
+        echo "wrote install.yaml (${VERSION})"
