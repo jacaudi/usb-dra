@@ -133,6 +133,8 @@ with a test each.
 - `examples/values.yaml` — the example deployment: the `rtl-sdr` and `rak4631` DeviceClasses,
   with the driver defaults shown commented. `task artifact` renders `install.yaml` with it.
 - `examples/claims.yaml` — example claim templates; not part of the chart.
+- `examples/helmrelease-*.yaml` — Flux HelmReleases (inline OCI chart) for RTL-SDRs and a USB
+  printer; `TestExampleHelmReleasesRender` renders their values through the chart.
 
 Device names are `usb-<vid>-<pid>-<id>` and must remain valid DNS labels of at most 63
 characters.
@@ -140,7 +142,7 @@ characters.
 ## Commands
 
 ```sh
-task test                      # go test ./...: 94 tests, needs helm on PATH (the chart tests render it)
+task test                      # go test ./...: 95 tests, needs helm on PATH (the chart tests render it)
 task ci                        # everything CI runs, helm lint + template included
 go vet ./...
 helm dependency build charts   # vendors common into charts/charts/ (honours Chart.lock)

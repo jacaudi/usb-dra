@@ -384,6 +384,16 @@ helm upgrade --install usb-dra oci://ghcr.io/jacaudi/charts/usb-dra -n kube-syst
 Each class selects this driver's devices of that vendor and one of those products, with the
 `device.driver` guard every shipped selector needs.
 
+### With Flux
+
+`examples/helmrelease-rtl-sdr.yaml` and `examples/helmrelease-usb-printer.yaml` are complete
+Flux HelmReleases that pull the OCI chart inline (`.spec.chart.kind: OCIRepository`). The
+printer example also carries a claim template for a CUPS pod. Keep the HelmRelease itself in
+`kube-system`, with no `targetNamespace`, so the release name stays `usb-dra`; Flux would
+otherwise default it to `kube-system-usb-dra`, and changing a release name makes Flux
+uninstall and reinstall. Run one release per cluster, so combine the classes you need into one
+HelmRelease.
+
 ### Without Helm
 
 Every release also publishes `install.yaml` on its GitHub Release: the chart rendered with
