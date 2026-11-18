@@ -24,7 +24,7 @@ by port. Serial devices also get their ttys injected, with a stable alias path.
 The code is built and unit-tested. The Helm chart is verified on a two-node kind v1.34.0:
 DaemonSet ready on both nodes, an empty pool published per node, both DeviceClasses present, the
 admission policy denying a cross-node slice write from the worker's pod-bound token, the rendered
-`release.yaml` accepted by a server dry run, and a clean `helm uninstall`. Not yet exercised: real
+`install.yaml` accepted by a server dry run, and a clean `helm uninstall`. Not yet exercised: real
 hardware, multi-node scheduling, and a deploy into the cluster (a home-ops follow-up).
 
 ## Invariants — do not break these
@@ -130,7 +130,7 @@ with a test each.
   app version (one release-please package). `charts/charts/` is the vendored dependency and is
   gitignored.
 - `examples/values.yaml` — the example deployment: the `rtl-sdr` and `rak4631` DeviceClasses,
-  with the driver defaults shown commented. `task artifact` renders `release.yaml` with it.
+  with the driver defaults shown commented. `task artifact` renders `install.yaml` with it.
 - `examples/claims.yaml` — example claim templates; not part of the chart.
 
 Device names are `usb-<vid>-<pid>-<id>` and must remain valid DNS labels of at most 63
@@ -145,8 +145,8 @@ go vet ./...
 helm dependency build charts   # vendors common into charts/charts/ (honours Chart.lock)
 helm lint charts
 helm lint charts -f examples/values.yaml
-task artifact VERSION=v0.1.0   # renders release.yaml from examples/values.yaml (gitignored)
-kubectl apply --dry-run=server -f release.yaml   # schema + CEL validation of the rendered chart
+task artifact VERSION=v0.1.0   # renders install.yaml from examples/values.yaml (gitignored)
+kubectl apply --dry-run=server -f install.yaml   # schema + CEL validation of the rendered chart
 docker build -t usb-dra .      # does NOT run tests: .dockerignore strips testdata and *_test.go
 ```
 

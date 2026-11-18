@@ -386,12 +386,12 @@ Each class selects this driver's devices of that vendor and one of those product
 
 ### Without Helm
 
-Every release also publishes `release.yaml` on its GitHub Release: the chart rendered with
+Every release also publishes `install.yaml` on its GitHub Release: the chart rendered with
 `examples/values.yaml` (so it includes the `rtl-sdr` and `rak4631` DeviceClasses), release name
 `usb-dra`, namespace `kube-system` and the release's image tag.
 
 ```sh
-kubectl apply -f https://github.com/jacaudi/usb-dra/releases/download/v0.1.0/release.yaml
+kubectl apply -f https://github.com/jacaudi/usb-dra/releases/download/v0.1.0/install.yaml
 ```
 
 The release URL and `task artifact VERSION=` take the `v`-prefixed tag (`v0.1.0`), unlike the
@@ -439,7 +439,7 @@ kubectl delete deviceclass rtl-sdr.usb.jacaudi.dev rak4631.usb.jacaudi.dev
 helm install usb-dra oci://ghcr.io/jacaudi/charts/usb-dra -n kube-system -f examples/values.yaml
 ```
 
-The same delete list applies to an install made from `release.yaml`. Those objects carry
+The same delete list applies to an install made from `install.yaml`. Those objects carry
 `app.kubernetes.io/managed-by: Helm` but no `meta.helm.sh/release-*` annotations, so
 `helm install` refuses to adopt them.
 

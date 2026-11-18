@@ -130,7 +130,7 @@ jobs:
     with:
       image: ${{ needs.release-image.outputs.image }}
 
-  # Ships the rendered chart as release.yaml for installs without Helm. No App
+  # Ships the rendered chart as install.yaml for installs without Helm. No App
   # secrets, for the same GHCR reason as every other job below `release` (see the
   # comment above `build`): verify-images pulls from GHCR, and GITHUB_TOKEN covers
   # both that and the release-asset upload.
@@ -143,7 +143,7 @@ jobs:
     uses: ./.github/workflows/ci-artifact.yml
     with:
       version: ${{ needs.release.outputs.tag_name }}
-      assets: release.yaml
+      assets: install.yaml
       verify-images: |
         ghcr.io/${{ github.repository }}:${VERSION}
 
