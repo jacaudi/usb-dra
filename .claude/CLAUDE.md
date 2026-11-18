@@ -112,8 +112,9 @@ with a test each.
   evaluates them the way the allocator does.
 - `internal/usb/chart*_test.go` — run `helm template` (fails, never skips, when Helm is
   missing) and assert the DaemonSet, RBAC, policy, DeviceClasses and schema rejections.
-  `chart_style_test.go` fails on any flow-style YAML (`{...}`, `[...]`) under `charts/` and
-  `examples/`: write block style.
+- `.yamllint.yml` — `yamllint` (`task repo:yaml`) fails on non-empty flow-style YAML
+  (`{...}`, `[...]`) in `charts/Chart.yaml`, `charts/values.yaml` and `examples/*.yaml`: write
+  block style.
 - `internal/usb/testdata/sysfs/` — captures from talos-01-cp and talos-05-wrk; keep them as
   regression fixtures.
 - `cmd/usb-dra-kubeletplugin/main.go` — flags, startup, rescan loop.
@@ -139,7 +140,7 @@ characters.
 ## Commands
 
 ```sh
-task test                      # go test ./...: 96 tests, needs helm on PATH (the chart tests render it)
+task test                      # go test ./...: 94 tests, needs helm on PATH (the chart tests render it)
 task ci                        # everything CI runs, helm lint + template included
 go vet ./...
 helm dependency build charts   # vendors common into charts/charts/ (honours Chart.lock)
