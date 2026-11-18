@@ -1,0 +1,32 @@
+# Example Flux HelmRelease: usb-dra for RTL-SDR dongles.
+#
+# One release per cluster: to run RTL-SDRs and other devices together, put every entry under
+# one release's deviceClasses instead of installing a second release.
+#
+# Leave the DaemonSet on every node: nodes without a dongle publish an empty pool, and the
+# scheduler sends each claim to a node with a free radio.
+#
+# Pin a specific dongle by serial only after giving every dongle a unique one
+# (`rtl_eeprom -s <serial>`, then physically replug): RTL-SDRs ship as 00000001, and
+# duplicates fall back to port identity. See examples/claims.yaml for claim templates.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: usb-dra
+  namespace: kube-system   # must be kube-system: Pod Security rejects the privileged pods elsewhere
+spec:
+  interval: 1h
+  chart:
+    kind: OCIRepository
+    spec:
+      interval: 1h
+      url: oci://ghcr.io/jacaudi/charts/usb-dra
+      ref:
+        tag: 0.1.0
+  values:
+    deviceClasses:
+      rtl-sdr:
+        vendor: "0bda"
+        products:
+          - "2838"
+          - "2832"

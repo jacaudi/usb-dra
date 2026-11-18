@@ -25,7 +25,9 @@ Two things make a CEL selector safe or not:
 CEL has no alias for the attribute map, so selectors spell it out. The chart
 renders the DeviceClasses from its `deviceClasses` values; the example
 deployment in `examples/values.yaml` defines the two used below (see
-[Installing](install.md)), and the example claims are in `examples/claims.yaml`.
+[Installing](install.md)), and the example claims are in `examples/claims.yaml`
+(the CUPS printer claim template is in
+`examples/helmrelease-usb-printer.yaml`).
 The attributes are listed in the [attribute reference](schema/attributes.md).
 
 ## Examples
