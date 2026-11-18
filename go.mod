@@ -5,7 +5,6 @@ go 1.26.0
 toolchain go1.27.4
 
 require (
-	go.yaml.in/yaml/v3 v3.0.5
 	k8s.io/api v0.34.13
 	k8s.io/apimachinery v0.34.13
 	k8s.io/client-go v0.34.13
@@ -59,6 +58,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 // indirect
 	golang.org/x/net v0.60.0 // indirect
 	golang.org/x/oauth2 v0.36.0 // indirect

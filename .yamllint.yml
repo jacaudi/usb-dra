@@ -18,6 +18,25 @@ rules:
     spaces: 2
     indent-sequences: true
 
+  # Block style only for the authored chart and examples YAML. yamllint has no per-path
+  # rules, but a rule-level `ignore` can scope one: ignore everything, then re-include.
+  # braces permits only the empty `{}` (charts/values.yaml is exactly that).
+  braces:
+    forbid: non-empty
+    ignore: |
+      *
+      !charts/Chart.yaml
+      !charts/values.yaml
+      !examples/*.yaml
+
+  brackets:
+    forbid: true
+    ignore: |
+      *
+      !charts/Chart.yaml
+      !charts/values.yaml
+      !examples/*.yaml
+
   empty-lines:
     max-end: 1
 
