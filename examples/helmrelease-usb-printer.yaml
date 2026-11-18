@@ -1,0 +1,53 @@
+# Example Flux HelmRelease: usb-dra for a USB printer, plus a claim template for a CUPS pod.
+#
+# One release per cluster: to run RTL-SDRs and a printer together, put both entries under one
+# release's deviceClasses instead of installing two releases.
+#
+# Printers (USB interface class 07) are published by default; --exclude-classes hides only
+# HID, mass storage and wireless controllers (03,08,e0). A printer that also exposes a
+# mass-storage "driver disk" interface is still published, because a device is hidden only
+# when every one of its interfaces is excluded.
+#
+# A DeviceClass selects by vendor and product ID, so this class admits only your printer
+# model. Find the IDs with `lsusb` on the node (ID vvvv:pppp) or, after install, with
+#   kubectl get resourceslices -o yaml | grep -E 'vendor|product'
+#
+# A pod claiming it (e.g. CUPS) gets the printer's USB device node (/dev/bus/usb/BBB/DDD)
+# and talks to it through libusb, which CUPS's usb backend uses. Untested on real hardware:
+# the kernel's usblp driver binds the printer first, and libusb must be able to detach it.
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: usb-dra
+  namespace: kube-system   # must be kube-system: Pod Security rejects the privileged pods elsewhere
+spec:
+  interval: 1h
+  chart:
+    kind: OCIRepository
+    spec:
+      interval: 1h
+      url: oci://ghcr.io/jacaudi/charts/usb-dra
+      ref:
+        tag: 0.1.0
+  values:
+    deviceClasses:
+      printer:
+        vendor: "04f9"     # replace: your printer's vendor ID (04f9 is Brother)
+        products:
+          - "0000"         # replace: your printer's product ID
+---
+# A fresh claim per pod, created from this template and deleted with the pod.
+apiVersion: resource.k8s.io/v1
+kind: ResourceClaimTemplate
+metadata:
+  name: printer
+  namespace: selfhosted
+spec:
+  spec:
+    devices:
+      requests:
+        - name: printer
+          exactly:
+            deviceClassName: printer.usb.jacaudi.dev
+            allocationMode: ExactCount
+            count: 1

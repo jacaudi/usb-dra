@@ -106,7 +106,9 @@ spec:
 
 `examples/claims.yaml` has this template and two pinned ones. Installing without
 Helm, pinning a version and uninstalling are in
-[Installing](docs/install.md).
+[Installing](docs/install.md). To install with Flux, use the HelmReleases in
+`examples/helmrelease-rtl-sdr.yaml` and `examples/helmrelease-usb-printer.yaml`
+([With Flux](docs/install.md#with-flux)).
 
 ## How it works
 
@@ -143,7 +145,7 @@ flowchart LR
 
 **Using it**
 
-- [Installing](docs/install.md): Helm and `install.yaml` installs, requirements and uninstall.
+- [Installing](docs/install.md): Helm, Flux and `install.yaml` installs, requirements and uninstall.
 - [Configuration](docs/configuration.md): every chart value, and how to add a DeviceClass.
 - [Selecting devices](docs/selecting-devices.md): unpinned and pinned claims, and safe CEL selectors.
 - [Upgrading](docs/upgrading.md): moving from `rtlsdr-dra` or from the hand-written manifests.

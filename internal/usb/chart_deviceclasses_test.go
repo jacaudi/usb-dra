@@ -9,6 +9,7 @@ import (
 
 	resourceapi "k8s.io/api/resource/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	sigsyaml "sigs.k8s.io/yaml"
 )
 
 // valuesFile writes yamlText verbatim to a temp file, so YAML coercion (1e03, 0403) happens as it would for a user's -f file, and returns the -f args for it. The directory is not t.TempDir(): that embeds the subtest name, and helm splits -f on commas.
@@ -84,6 +85,62 @@ func TestExampleValuesRender(t *testing.T) {
 	want := []string{"rak4631.usb.jacaudi.dev", "rtl-sdr.usb.jacaudi.dev"}
 	if !slices.Equal(got, want) {
 		t.Errorf("examples/values.yaml DeviceClasses = %v, want %v", got, want)
+	}
+}
+
+// TestExampleHelmReleasesRender keeps the Flux examples honest: each HelmRelease's .spec.values must pass the chart's schema and render exactly the classes it names, and every claim template in the same file must ask for one of them.
+func TestExampleHelmReleasesRender(t *testing.T) {
+	tests := []struct {
+		file    string
+		classes []string
+	}{
+		{"../../examples/helmrelease-rtl-sdr.yaml", []string{"rtl-sdr.usb.jacaudi.dev"}},
+		{"../../examples/helmrelease-usb-printer.yaml", []string{"printer.usb.jacaudi.dev"}},
+	}
+	for _, tt := range tests {
+		t.Run(filepath.Base(tt.file), func(t *testing.T) {
+			var values map[string]any
+			var claimClasses []string
+			for _, doc := range readDocs(t, tt.file) {
+				var obj struct {
+					Kind string `json:"kind"`
+					Spec struct {
+						Values map[string]any `json:"values"`
+					} `json:"spec"`
+				}
+				if err := sigsyaml.Unmarshal(doc, &obj); err != nil {
+					t.Fatalf("decode %s: %v", tt.file, err)
+				}
+				switch obj.Kind {
+				case "HelmRelease":
+					values = obj.Spec.Values
+				case "ResourceClaimTemplate":
+					var rct resourceapi.ResourceClaimTemplate
+					if err := sigsyaml.UnmarshalStrict(doc, &rct); err != nil {
+						t.Fatalf("decode ResourceClaimTemplate: %v", err)
+					}
+					for _, r := range rct.Spec.Spec.Devices.Requests {
+						claimClasses = append(claimClasses, r.Exactly.DeviceClassName)
+					}
+				}
+			}
+			if values == nil {
+				t.Fatalf("%s has no HelmRelease with .spec.values", tt.file)
+			}
+			b, err := sigsyaml.Marshal(values)
+			if err != nil {
+				t.Fatalf("encode values: %v", err)
+			}
+			rendered := renderedDeviceClasses(t, valuesFile(t, string(b))...)
+			if got := slices.Sorted(maps.Keys(rendered)); !slices.Equal(got, tt.classes) {
+				t.Errorf("DeviceClasses = %v, want %v", got, tt.classes)
+			}
+			for _, c := range claimClasses {
+				if _, ok := rendered[c]; !ok {
+					t.Errorf("claim template asks for %q, which the HelmRelease does not create", c)
+				}
+			}
+		})
 	}
 }
 
