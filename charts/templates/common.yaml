@@ -1,16 +1,12 @@
 {{/*
-Builds a fresh values dict for the bjw-s common library and renders it. User values are
-never merged into it: only the helpers below read them, so privileged, root and the host
-mounts cannot be reached from values.
+Renders the bjw-s common library from the fresh values document "usb-dra.values" builds.
+User values are never merged into it. fromYaml reports a parse error as an Error key
+instead of failing, which would silently drop every section, so fail on it here.
 */}}
-{{- /* common >= 5.3.0 renders a Namespace from .Values.namespace; this dict bypasses the library defaults, so seed it. Helm owns the release namespace. */ -}}
-{{- /* values.yaml is empty, so .Values.global can be absent; common needs a map there. */ -}}
-{{- $bjwsValues := dict "global" (.Values.global | default dict) "namespace" (dict "create" false) -}}
-
-{{- $_ := set $bjwsValues "controllers" (include "usb-dra.values.controllers" . | fromYaml).controllers -}}
-{{- $_ := set $bjwsValues "persistence" (include "usb-dra.values.persistence" . | fromYaml).persistence -}}
-{{- $_ := set $bjwsValues "serviceAccount" (include "usb-dra.values.serviceaccount" . | fromYaml).serviceAccount -}}
-{{- $_ := set $bjwsValues "rbac" (include "usb-dra.values.rbac" . | fromYaml).rbac -}}
+{{- $bjwsValues := include "usb-dra.values" . | fromYaml -}}
+{{- if hasKey $bjwsValues "Error" }}
+{{- fail (printf "usb-dra.values is not valid YAML: %s" $bjwsValues.Error) }}
+{{- end -}}
 
 {{/* Create new context with constructed values */}}
 {{- $ctx := deepCopy . -}}
