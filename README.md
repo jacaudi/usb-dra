@@ -176,3 +176,7 @@ flowchart LR
   chart builds the DaemonSet, ServiceAccount and RBAC through it (5.3.0).
 - [`k8s.io/dynamic-resource-allocation`](https://pkg.go.dev/k8s.io/dynamic-resource-allocation):
   the kubelet plugin helper the driver is built on.
+
+## License
+
+[MIT](LICENSE) © 2026 jacaudi
