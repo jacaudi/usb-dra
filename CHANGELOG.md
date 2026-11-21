@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.1](https://github.com/jacaudi/usb-dra/compare/v0.1.0...v0.1.1) (2026-11-21)
+
+
+### Bug Fixes
+
+* **image:** cross-compile each platform instead of shipping amd64 for arm64 ([cd4d6a4](https://github.com/jacaudi/usb-dra/commit/cd4d6a467ceaafce8f80c868aae33ed1dcfce79c))
+
+
+### Miscellaneous Chores
+
+* **deps:** Update GitHub Actions ([d9b7d52](https://github.com/jacaudi/usb-dra/commit/d9b7d522df38584c21b40b5205797f97dd89bbc8))
+
 ## 0.1.0 (2026-11-18)
 
 
