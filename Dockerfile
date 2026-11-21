@@ -1,4 +1,7 @@
-FROM mirror.gcr.io/library/golang:1.27-bookworm AS build
+# Build on the runner's own platform and cross-compile for the target: buildx sets
+# BUILDPLATFORM, TARGETOS and TARGETARCH per platform. Giving TARGETARCH a default here
+# would shadow the value buildx passes and build every platform for that one arch.
+FROM --platform=$BUILDPLATFORM mirror.gcr.io/library/golang:1.27-bookworm AS build
 
 WORKDIR /src
 COPY go.mod go.sum ./
@@ -6,8 +9,8 @@ RUN go mod download
 COPY cmd/ cmd/
 COPY internal/ internal/
 
-ARG TARGETOS=linux
-ARG TARGETARCH=amd64
+ARG TARGETOS
+ARG TARGETARCH
 RUN go test ./... \
  && CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
     go build -trimpath -ldflags="-s -w" -o /usb-dra-kubeletplugin ./cmd/usb-dra-kubeletplugin

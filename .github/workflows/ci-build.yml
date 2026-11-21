@@ -145,3 +145,28 @@ jobs:
         env:
           DIGEST: ${{ steps.build.outputs.digest }}   # via env: zizmor template-injection
         run: echo "image=${IMAGE}@${DIGEST}" >> "$GITHUB_OUTPUT"
+
+      # Guards against a build stage that ignores TARGETARCH and ships one arch under
+      # every platform's manifest entry. Runs before the reference reaches the chart.
+      - name: Verify each platform's binary matches its architecture
+        env:
+          REF: ${{ steps.ref.outputs.image }}
+          PLATFORMS: ${{ inputs.platforms }}
+        run: |
+          set -euo pipefail
+          fail=0
+          for p in ${PLATFORMS//,/ }; do
+            case "${p#*/}" in
+              amd64) want="x86-64" ;;
+              arm64) want="ARM aarch64" ;;
+              *) echo "::error::no ELF signature known for ${p}"; exit 1 ;;
+            esac
+            dir="$(mktemp -d)"
+            cid="$(docker create --platform "${p}" "${REF}")"
+            docker cp "${cid}:/usr/bin/usb-dra-kubeletplugin" "${dir}/bin"
+            docker rm "${cid}" >/dev/null
+            got="$(file -b "${dir}/bin")"
+            echo "${p}: ${got}"
+            case "${got}" in *"${want}"*) ;; *) echo "::error::${p} image holds a non-${want} binary"; fail=1 ;; esac
+          done
+          exit "${fail}"
